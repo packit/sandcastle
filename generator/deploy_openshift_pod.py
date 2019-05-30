@@ -24,7 +24,7 @@ import logging
 import os
 import time
 import datetime
-from typing import Dict
+from typing import Dict, List
 
 from kubernetes import config, client
 from kubernetes.client.rest import ApiException
@@ -51,13 +51,17 @@ class OpenshiftDeployer(object):
         """
         self.volume_dir = volume_dir
         self.upstream_name = upstream_name
-        self.env_dict = env_dict
+        self.env_image_vars = env_dict
         self.project_name = project_name
         timestamp = datetime.datetime.now().strftime("-%Y%M%d-%H%M%S%f")
         self.pod_name = "{upstream_name}-{timestamp}-deployment".format(
             upstream_name=upstream_name, timestamp=timestamp
         )
         self.api_token = None
+        self.pod_manifest = None
+
+    def create_pod_manifest(self):
+        env_image_vars = OpenshiftDeployer.build_env_image_vars(self.env_image_vars)
         self.pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -67,12 +71,9 @@ class OpenshiftDeployer(object):
                     {
                         "image": self.upstream_name,
                         "name": self.upstream_name,
-                        # 'env': [
-                        #    {'name': 'DOWNSTREAM_IMAGE_NAME', 'value': self.upstream_name},
-                        #    {'name': 'UPSTREAM_IMAGE_NAME', 'value': self.upstream_name}
-                        # ],
+                        "env": env_image_vars,
                         "volumeMounts": [
-                            {"mountPath": volume_dir, "name": "betka-generator"}
+                            {"mountPath": self.volume_dir, "name": "packit-generator"}
                         ],
                     }
                 ],
@@ -86,6 +87,19 @@ class OpenshiftDeployer(object):
                 ],
             },
         }
+
+    @staticmethod
+    def build_env_image_vars(env_dict: Dict) -> List:
+        env_image_vars = []
+        if not env_dict:
+            return []
+        for key, value in env_dict.items():
+            if not value:
+                continue
+            if isinstance(value, list):
+                continue
+            env_image_vars.append({"name": key, "value": value})
+        return env_image_vars
 
     def setup_kubernetes(self):
         logger.debug("Setup kubernetes")
@@ -122,9 +136,13 @@ class OpenshiftDeployer(object):
         )
 
     def is_pod_already_deployed(self):
-        resp = None
+        """
+        Check if pod is already deployed
+        :return:
+        """
         try:
             resp = self.get_response_from_pod()
+            return resp
         except ApiException as e:
             logger.info(e.status)
             if e.status != 404:
@@ -132,9 +150,12 @@ class OpenshiftDeployer(object):
                 raise GeneratorDeployException
             else:
                 return None
-        return resp
 
     def deploy_pod(self):
+        """
+        Deploy POD in namespace
+        :return:
+        """
         logger.info("Creating POD")
         resp = self.is_pod_already_deployed()
 

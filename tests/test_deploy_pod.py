@@ -164,8 +164,8 @@ def delete_pod():
     return {}
 
 
-def test_is_pod_already_deployed():
-    od = OpenshiftDeployer("/tmp", "cyborg", "bot-ferdinand")
+def test_is_pod_already_deployed(init_openshift_deployer):
+    od = init_openshift_deployer
     flexmock(od).should_receive("get_response_from_pod").and_raise(
         ApiException(status=200, reason="POD already exists")
     )
@@ -173,12 +173,28 @@ def test_is_pod_already_deployed():
         od.is_pod_already_deployed()
 
 
-def test_pod_not_deployed(pod_not_deployed):
-    od = OpenshiftDeployer("/tmp", "packit", "generator")
+def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
+    od = init_openshift_deployer
     flexmock(od).should_receive("get_response_from_pod").and_return(pod_not_deployed)
     assert od.is_pod_already_deployed()
 
 
-def test_pod_deploy_not_in_openshift(pod_not_deployed):
-    od = OpenshiftDeployer("/tmp", "packit", "generator")
+def test_pod_deploy_not_in_openshift(init_openshift_deployer, pod_not_deployed):
+    od = init_openshift_deployer
     assert not od.deploy_image()
+
+
+@pytest.mark.parametrize(
+    "env_dict,env_image_vars",
+    [
+        (
+            {"DOWNSTREAM_IMAGE": "FOOBAR"},
+            [{"name": "DOWNSTREAM_IMAGE", "value": "FOOBAR"}],
+        ),
+        ({}, []),
+        ({"NAME": ["VAL1, VAL2"]}, []),
+        ({"NAME": []}, []),
+    ],
+)
+def test_env_image_vars(env_dict, env_image_vars):
+    assert OpenshiftDeployer.build_env_image_vars(env_dict=env_dict) == env_image_vars
