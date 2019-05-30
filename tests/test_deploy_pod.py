@@ -30,18 +30,15 @@ from generator.exceptions import GeneratorDeployException
 @pytest.fixture()
 def pod_not_deployed():
     return {
-            "kind": "Status",
-            "apiVersion": "v1",
-            "metadata": {},
-            "status": "Failure",
-            "message": "pods \"generator\" not found",
-            "reason": "NotFound",
-            "details": {
-                "name": "generator",
-                "kind": "pods"
-            },
-            "code": 404
-        }
+        "kind": "Status",
+        "apiVersion": "v1",
+        "metadata": {},
+        "status": "Failure",
+        "message": 'pods "generator" not found',
+        "reason": "NotFound",
+        "details": {"name": "generator", "kind": "pods"},
+        "code": 404,
+    }
 
 
 @pytest.fixture()
@@ -60,13 +57,13 @@ def pod_json_deployed():
             "labels": {
                 "deployment": "generator-5",
                 "deploymentconfig": "generator",
-                "io.openshift.tags": "generator"
+                "io.openshift.tags": "generator",
             },
             "annotations": {
                 "openshift.io/deployment-config.latest-version": "5",
                 "openshift.io/deployment-config.name": "generator",
                 "openshift.io/deployment.name": "generator-5",
-                "openshift.io/scc": "restricted"
+                "openshift.io/scc": "restricted",
             },
             "ownerReferences": [
                 {
@@ -75,18 +72,16 @@ def pod_json_deployed():
                     "name": "generator-5",
                     "uid": "f4204b91-5c38-11e9-ac31-fa163ed2928c",
                     "controller": "true",
-                    "blockOwnerDeletion": "true"
+                    "blockOwnerDeletion": "true",
                 }
-            ]
+            ],
         },
         "spec": {
             "volumes": [
                 {
                     "name": "packit-generator",
-                    "persistentVolumeClaim": {
-                        "claimName": "claim.generator"
-                    }
-                },
+                    "persistentVolumeClaim": {"claimName": "claim.generator"},
+                }
             ],
             "containers": [
                 {
@@ -96,28 +91,19 @@ def pod_json_deployed():
                         {
                             "name": "NAMESPACE",
                             "valueFrom": {
-                                "configMapKeyRef": {
-                                    "name": "common",
-                                    "key": "project"
-                                }
-                            }
-                        },
+                                "configMapKeyRef": {"name": "common", "key": "project"}
+                            },
+                        }
                     ],
                     "resources": {
-                        "limits": {
-                            "cpu": "400m",
-                            "memory": "800Mi"
-                        },
-                        "requests": {
-                            "cpu": "200m",
-                            "memory": "400Mi"
-                        }
+                        "limits": {"cpu": "400m", "memory": "800Mi"},
+                        "requests": {"cpu": "200m", "memory": "400Mi"},
                     },
                     "volumeMounts": [
                         {
                             "name": "packit-generator",
-                            "mountPath": "/tmp/packit-generator"
-                        },
+                            "mountPath": "/tmp/packit-generator",
+                        }
                     ],
                     "terminationMessagePath": "/dev/termination-log",
                     "terminationMessagePolicy": "File",
@@ -127,24 +113,18 @@ def pod_json_deployed():
             "restartPolicy": "Always",
             "terminationGracePeriodSeconds": 30,
             "dnsPolicy": "ClusterFirst",
-            "nodeSelector": {
-                "region": "compute"
-            },
+            "nodeSelector": {"region": "compute"},
             "serviceAccountName": "generator",
             "serviceAccount": "generator",
-            "imagePullSecrets": [
-                {
-                    "name": "generator-dockercfg-4bqcm"
-                }
-            ],
+            "imagePullSecrets": [{"name": "generator-dockercfg-4bqcm"}],
             "schedulerName": "default-scheduler",
             "tolerations": [
                 {
                     "key": "node.kubernetes.io/memory-pressure",
                     "operator": "Exists",
-                    "effect": "NoSchedule"
+                    "effect": "NoSchedule",
                 }
-            ]
+            ],
         },
         "status": {
             "phase": "Running",
@@ -152,21 +132,20 @@ def pod_json_deployed():
             "containerStatuses": [
                 {
                     "name": "generator",
-                    "state": {
-                        "running": {
-                            "startedAt": "2019-05-29T05:56:29Z"
-                        }
-                    },
+                    "state": {"running": {"startedAt": "2019-05-29T05:56:29Z"}},
                     "lastState": {},
                     "ready": "true",
                     "restartCount": 0,
                     "image": "docker.io/usercont/generator:latest",
-                    "imageID": "docker-pullable://docker.io/usercont/generator@sha256:51289119edf387c47ed149eb3382c23f4115bc343adcaaa6e1731d269b6ec70a",
-                    "containerID": "docker://201ad777bb6d36077590fed8796bcd6170a62833c124467a1ffa2af4c60f1272"
+                    "imageID": "docker-pullable://docker.io/usercont/"
+                    "generator@sha256:51289119edf387c47ed149"
+                    "eb3382c23f4115bc343adcaaa6e1731d269b6ec70a",
+                    "containerID": "docker://201ad777bb6d36077590fed8796"
+                    "bcd6170a62833c124467a1ffa2af4c60f1272",
                 }
             ],
-            "qosClass": "Burstable"
-        }
+            "qosClass": "Burstable",
+        },
     }
 
 
@@ -177,24 +156,19 @@ def pod_already_deployed(pod_json_deployed):
 
 @pytest.fixture()
 def create_pod():
-    return {
-
-    }
+    return {}
 
 
 @pytest.fixture()
 def delete_pod():
-    return {
-
-    }
+    return {}
 
 
 def test_is_pod_already_deployed():
     od = OpenshiftDeployer("/tmp", "cyborg", "bot-ferdinand")
-    flexmock(od)\
-        .should_receive("get_response_from_pod")\
-        .and_raise(ApiException(status=200,
-                                reason="POD already exists"))
+    flexmock(od).should_receive("get_response_from_pod").and_raise(
+        ApiException(status=200, reason="POD already exists")
+    )
     with pytest.raises(GeneratorDeployException):
         od.is_pod_already_deployed()
 
