@@ -1,0 +1,19 @@
+---
+- name: Install dependencies for generator.
+  hosts: all
+  tasks:
+  - name: Install all RPM packages needed to hack on generator.
+    dnf:
+      name:
+      - git
+      - python3-devel
+      - python3-ipdb  # for easy debugging
+      - python3-jsonschema
+      - python3-packaging
+      - python3-pip
+      - python3-pyyaml
+      - python3-setuptools
+      - python3-setuptools_scm
+      - python3-setuptools_scm_git_archive
+      - python3-wheel  # for bdist_wheel
+      state: present

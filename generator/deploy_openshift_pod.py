@@ -28,15 +28,14 @@ from typing import Dict
 
 from kubernetes import config, client
 from kubernetes.client.rest import ApiException
-from packit.utils import run_command
 from generator.exceptions import GeneratorDeployException
-
+from generator.utils import run_command
 logger = logging.getLogger(__name__)
 
 
 class OpenshiftDeployer(object):
 
-    def __init__(self, volume_dir: str, upstream_name: str, project_name: str, env_dict: Dict):
+    def __init__(self, volume_dir: str, upstream_name: str, project_name: str, env_dict: Dict = None):
         """
 
         :param volume_dir:
@@ -124,12 +123,14 @@ class OpenshiftDeployer(object):
             if e.status != 404:
                 logger.error(f"Unknown error: {e!r}")
                 raise GeneratorDeployException
+            else:
+                return None
         return resp
 
     def deploy_pod(self):
         logger.info("Creating POD")
         resp = self.is_pod_already_deployed()
-        return True
+
         if not resp:
             logger.info("Pod with name %r does not exist in namespace %r" % (self.pod_name,
                                                                              self.project_name))
