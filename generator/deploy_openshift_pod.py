@@ -180,4 +180,4 @@ class OpenshiftDeployer(object):
             return True
         else:
             logger.warning("Generator IS NOT RUNNING in OpenShift.")
-            pass
+            return False

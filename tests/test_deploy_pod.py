@@ -203,3 +203,8 @@ def test_pod_not_deployed(pod_not_deployed):
     od = OpenshiftDeployer("/tmp", "packit", "generator")
     flexmock(od).should_receive("get_response_from_pod").and_return(pod_not_deployed)
     assert od.is_pod_already_deployed()
+
+
+def test_pod_deploy_not_in_openshift(pod_not_deployed):
+    od = OpenshiftDeployer("/tmp", "packit", "generator")
+    assert not od.deploy_image()
