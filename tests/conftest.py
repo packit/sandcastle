@@ -23,7 +23,13 @@
 import pytest
 from generator.deploy_openshift_pod import OpenshiftDeployer
 
+VOLUME_DIR = "/tmp"
+PROJECT_NAME = "cyborg"
+UPSTREAM_NAME = "generator"
+
 
 @pytest.fixture()
 def init_openshift_deployer():
-    return OpenshiftDeployer("/tmp", "cyborg", "generator")
+    return OpenshiftDeployer(
+        volume_dir=VOLUME_DIR, project_name=PROJECT_NAME, upstream_name=UPSTREAM_NAME
+    )

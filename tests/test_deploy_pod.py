@@ -198,3 +198,43 @@ def test_pod_deploy_not_in_openshift(init_openshift_deployer, pod_not_deployed):
 )
 def test_env_image_vars(env_dict, env_image_vars):
     assert OpenshiftDeployer.build_env_image_vars(env_dict=env_dict) == env_image_vars
+
+
+def test_manifest(init_openshift_deployer):
+    od = init_openshift_deployer
+    assert od
+    KEY = "UPSTREAM_NAME"
+    VALUE = "COLIN"
+    DEPLOY_NAME = "generator-123435-deployment"
+    expected_manifest = {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {"name": DEPLOY_NAME},
+        "spec": {
+            "containers": [
+                {
+                    "image": od.upstream_name,
+                    "name": od.upstream_name,
+                    "env": [{"name": KEY, "value": VALUE}],
+                    "volumeMounts": [
+                        {
+                            "mountPath": f"{od.volume_dir}",
+                            "name": f"{od.project_name}-{od.upstream_name}",
+                        }
+                    ],
+                }
+            ],
+            "restartPolicy": "Never",
+            "serviceAccountName": "packit-service",
+            "volumes": [
+                {
+                    "name": f"{od.project_name}-{od.upstream_name}",
+                    "persistentVolumeClaim": {"claimName": f"claim.{od.project_name}"},
+                }
+            ],
+        },
+    }
+    flexmock(od).should_receive("get_pod_name_id").and_return(DEPLOY_NAME)
+    od.env_image_vars = {KEY: VALUE}
+    od.create_pod_manifest()
+    assert od.pod_manifest == expected_manifest

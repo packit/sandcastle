@@ -53,15 +53,18 @@ class OpenshiftDeployer(object):
         self.upstream_name = upstream_name
         self.env_image_vars = env_dict
         self.project_name = project_name
-        timestamp = datetime.datetime.now().strftime("-%Y%M%d-%H%M%S%f")
-        self.pod_name = "{upstream_name}-{timestamp}-deployment".format(
-            upstream_name=upstream_name, timestamp=timestamp
-        )
+        self.pod_name = None
         self.api_token = None
         self.pod_manifest = None
 
+    def get_pod_name_id(self):
+        timestamp = datetime.datetime.now().strftime("-%Y%M%d-%H%M%S%f")
+        return f"{self.upstream_name}-{timestamp}-deployment"
+
     def create_pod_manifest(self):
+        self.pod_name = self.get_pod_name_id()
         env_image_vars = OpenshiftDeployer.build_env_image_vars(self.env_image_vars)
+        volumeName = f"{self.project_name}-{self.upstream_name}"
         self.pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -73,7 +76,7 @@ class OpenshiftDeployer(object):
                         "name": self.upstream_name,
                         "env": env_image_vars,
                         "volumeMounts": [
-                            {"mountPath": self.volume_dir, "name": "packit-generator"}
+                            {"mountPath": self.volume_dir, "name": volumeName}
                         ],
                     }
                 ],
@@ -81,8 +84,10 @@ class OpenshiftDeployer(object):
                 "serviceAccountName": "packit-service",
                 "volumes": [
                     {
-                        "name": "packit-generator",
-                        "persistentVolumeClaim": {"claimName": "claim.packit"},
+                        "name": volumeName,
+                        "persistentVolumeClaim": {
+                            "claimName": f"claim.{self.project_name}"
+                        },
                     }
                 ],
             },
@@ -202,6 +207,7 @@ class OpenshiftDeployer(object):
     def deploy_image(self):
         logger.info("Deploying image '%r' into a new POD.", self.upstream_name)
         if "KUBERNETES_SERVICE_HOST" in os.environ:
+            self.create_pod_manifest()
             self.setup_kubernetes()
             result = self.deploy_pod()
             self.delete_pod()
