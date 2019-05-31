@@ -9,7 +9,7 @@ test-build: image-build
 
 test-in-container: test-build
 	docker run --rm \
-	        --name=packit-generator \
+	        --name=packit-generator-test \
 			$(TEST_IMAGE_NAME) \
 			make exec-test
 

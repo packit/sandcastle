@@ -4,7 +4,7 @@ ENV LANG=en_US.UTF-8 \
     PYTHONDONTWRITEBYTECODE=yes \
     HOME=/tmp/packit-generator
 
-COPY requirements.txt requirements.sh files/packit-run.sh /tmp/packit-generator/
+COPY requirements.sh files/packit-run.sh ${HOME}
 
 WORKDIR ${HOME}
 
