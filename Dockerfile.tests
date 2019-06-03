@@ -1,0 +1,5 @@
+FROM docker.io/usercont/packit-generator
+
+RUN pip3 install -r tests/requirements.txt
+
+CMD ["make", "exec-test"]
