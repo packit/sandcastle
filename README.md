@@ -9,6 +9,6 @@ to be secure.
 ```python
 from generator.deploy_openshift_pod import OpenshiftDeployer
 od = OpenshiftDeployer(volume_dir="/tmp", upstream_name="colin", project_name="packit")
-od.deploy_image()
+od.run()
 
 ```
