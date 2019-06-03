@@ -2,7 +2,6 @@
 # create pod to run pod
 # check the pod
 # pod
-import os
 import time
 from pathlib import Path
 
@@ -11,18 +10,28 @@ from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions
 from kubernetes.client.rest import ApiException
 
-from generator.deploy_openshift_pod import OpenshiftDeployer, VolumeSpec
+from generator.deploy_openshift_pod import OpenshiftDeployer, MappedDir
 from generator.utils import run_command
 
-
-GENERATOR_IMAGE_NAME = "docker.io/usercont/sandbox"
-POD_NAME = "generator-pod"
+SANDBOX_IMAGE = "docker.io/usercont/packit-generator"
+TEST_IMAGE_NAME = "docker.io/usercont/packit-generator-test"
+POD_NAME = "test-orchestrator"
 NAMESPACE = "myproject"
 
 
 def build_now():
     project_root = Path(__file__).parent.parent.parent
-    run_command(["docker", "build", "-t", GENERATOR_IMAGE_NAME, str(project_root)])
+    run_command(
+        [
+            "docker",
+            "build",
+            "-t",
+            TEST_IMAGE_NAME,
+            "-f",
+            "Dockerfile.tests",
+            str(project_root),
+        ]
+    )
 
 
 def deploy(test_name: str):
@@ -37,7 +46,7 @@ def deploy(test_name: str):
         "spec": {
             "containers": [
                 {
-                    "image": GENERATOR_IMAGE_NAME,
+                    "image": TEST_IMAGE_NAME,
                     "name": POD_NAME,
                     "tty": True,  # corols
                     "command": [
@@ -47,7 +56,7 @@ def deploy(test_name: str):
                         "-p",
                         "no:cacheprovider",
                         "-k",
-                        test_name,
+                        f"tests/e2e/test_ironman.py::{test_name}",
                     ],
                     "imagePullPolicy": "Never",
                 }
@@ -80,58 +89,52 @@ def deploy(test_name: str):
             if counter < 0:
                 raise RuntimeError("Pod did not finish on time.")
             info = api.read_namespaced_pod(POD_NAME, NAMESPACE)
-            if info.status.phase != "Running":
+            if info.status.phase == "Succeeded":
                 break
+            if info.status.phase == "Failed":
+                raise RuntimeError("Test failed")
             time.sleep(2.0)
             counter -= 1
+    finally:
         print(
             api.read_namespaced_pod_log(name=POD_NAME, namespace=NAMESPACE, follow=True)
         )
-    finally:
         api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
 
 
-@pytest.mark.skipif(
-    "KUBERNETES_SERVICE_HOST" not in os.environ,
-    reason="Not running in a pod, skipping.",
-)
 def test_basic_e2e_inside():
     """ this part is meant to run inside an openshift pod """
     o = OpenshiftDeployer(
-        image_reference="fedora:30", k8s_namespace_name=NAMESPACE, pod_name="lllollz"
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, pod_name="lllollz"
     )
-    o.run(command=["ls", "-lha"])
+    try:
+        o.run(command=["ls", "-lha"])
+    finally:
+        o.delete_pod()
 
 
-@pytest.mark.skipif(
-    "KUBERNETES_SERVICE_HOST" not in os.environ,
-    reason="Not running in a pod, skipping.",
-)
-def test_local_path_e2e_inside():
-    """ this part is meant to run inside an openshift pod """
-    v = VolumeSpec()
-    v.local_dir = "/tmp/asd/"
-    v.path = "/asd"
+def test_local_path_e2e_inside_w_exec(tmpdir):
+    m_dir = MappedDir()
+    m_dir.local_dir = str(tmpdir.mkdir("stark"))
+    m_dir.path = "/tmp/stark"
 
-    p = Path(v.local_dir)
-    p.mkdir()
+    p = Path(m_dir.local_dir)
     p.joinpath("qwe").write_text("Hello, Tony!")
 
     o = OpenshiftDeployer(
-        image_reference="fedora:30",
-        k8s_namespace_name=NAMESPACE,
-        pod_name="lllollz2",
-        volume_mounts=[v],
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
     )
-    o.run(command=["ls", "/asd/qwe"])
+    o.run()
+    try:
+        o.exec(command=["ls", "/tmp/stark/qwe"])
+    finally:
+        o.delete_pod()
 
 
 @pytest.mark.parametrize(
     "test_name", ("test_basic_e2e_inside", "test_local_path_e2e_inside")
 )
 def test_basic_e2e(test_name):
-    """ the most simple e2e test """
+    """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
     build_now()
     deploy(test_name)
-
-    # wait for the to finish
