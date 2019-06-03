@@ -181,7 +181,7 @@ def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
 
 def test_pod_deploy_not_in_openshift(init_openshift_deployer, pod_not_deployed):
     od = init_openshift_deployer
-    assert not od.deploy_image()
+    assert not od.run()
 
 
 @pytest.mark.parametrize(

@@ -1,5 +1,20 @@
+# This is meant to run in an openshift pod.
+# The expectation is to create sandbox pods from this one.
 FROM docker.io/usercont/packit-generator
 
+RUN dnf install -y ansible
+
+# ANSIBLE_STDOUT_CALLBACK - nicer output from the playbook run
+ENV ANSIBLE_STDOUT_CALLBACK=debug
+
+# Ansible doesn't like /tmp
+COPY files/install-rpm-packages.yaml /src/files/install-rpm-packages.yaml
+# Install packages first and reuse the cache as much as possible
+RUN cd /src/ \
+    && ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml
+
 RUN pip3 install -r tests/requirements.txt
+COPY . /src/
+WORKDIR /src
 
 CMD ["make", "exec-test"]
