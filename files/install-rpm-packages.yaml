@@ -8,12 +8,13 @@
       - git
       - python3-devel
       - python3-ipdb  # for easy debugging
-      - python3-jsonschema
-      - python3-packaging
       - python3-pip
-      - python3-pyyaml
+      - python3-kubernetes
       - python3-setuptools
       - python3-setuptools_scm
       - python3-setuptools_scm_git_archive
-      - python3-wheel  # for bdist_wheel
+      - origin-clients  # oc cp
+
+      - python3-pytest  # tests
+      - python3-flexmock
       state: present
