@@ -334,6 +334,12 @@ class OpenshiftDeployer(object):
                 # TODO: can we use watch instead?
                 time.sleep(1)
 
+    def get_logs(self) -> str:
+        """ provide logs from the pod """
+        return self.api.read_namespaced_pod_log(
+            name=self.pod_name, namespace=self.k8s_namespace_name
+        )
+
     def run(self, command: Optional[List] = None):
         """
         deploy a pod; if a command is set, we wait for it to finish,
@@ -344,13 +350,15 @@ class OpenshiftDeployer(object):
         """
         self.deploy_pod(command=command)
         logger.info("Sandbox pod is deployed.")
+        return self.get_logs()
 
-    def exec(self, command: List[str]):
+    def exec(self, command: List[str]) -> str:
         """
         exec a command in a running pod; if any mapped dirs are set,
         sync the dirs before and after the execution
 
         :param command: command to run
+        :returns logs
         """
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         for m_dir in self.mapped_dirs:
@@ -369,3 +377,4 @@ class OpenshiftDeployer(object):
         logger.debug("exec response = %r" % response)
         for m_dir in self.mapped_dirs:
             self.copy_path_from_pod(m_dir)
+        return response
