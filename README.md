@@ -5,6 +5,12 @@ Run untrusted code in a sandbox - an OpenShift pod.
 
 ## Usage
 
+The prerequisite is that you're logged in an OpenShift cluster:
+```
+$ oc status
+ In project Local Project (myproject) on server https://localhost:8443
+```
+
 The simplest use case is to invoke a command in a new openshift pod:
 
 ```python
