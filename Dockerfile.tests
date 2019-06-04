@@ -14,8 +14,7 @@ COPY tests/requirements.txt /src/tests/requirements.txt
 RUN cd /src/ \
     && ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml
 
-RUN pip3 install -r tests/requirements.txt
-COPY . /src/
 WORKDIR /src
-
+RUN pip3 install -r tests/requirements.txt
 CMD ["make", "exec-test"]
+COPY . /src/
