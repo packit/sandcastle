@@ -20,78 +20,159 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+"""
+# Design
+
+## Volumes
+
+Our team have met to discuss volumes and sharing data b/w containers & pods.
+We came up with these solutions:
+
+* `oc cp` - copy data using the `cp` command: very simple
+
+* controller pod - dynamically create and deploy pods
+  with volumes - very flexible, pretty complex
+
+* claim - utilize persistent volume claim feature of k8s: let pods claim volumes
+"""
+
+import datetime
 import logging
 import os
 import time
-import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from kubernetes import config, client
+from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream
+
 from generator.exceptions import GeneratorDeployException
 from generator.utils import run_command
 
 logger = logging.getLogger(__name__)
 
 
+class VolumeSpec:
+    """
+    Dataclass which defines volume configuration for the sandbox pod
+    """
+
+    # name of the volume to use
+    name: str
+    # path within the sandbox where the volume is meant to be mounted
+    path: str
+    # use and existing PersistentVolumeClaim
+    pvc: str = ""
+
+
+class MappedDir:
+    """
+    Copy local directory to the pod using `oc cp`
+    """
+
+    # path within the sandbox where the directory should be copied
+    path: str
+    # copy this local directory to sandbox (using `oc cp`)
+    local_dir: str = ""
+
+
 class OpenshiftDeployer(object):
     def __init__(
         self,
-        volume_dir: str,
-        upstream_name: str,
-        project_name: str,
-        env_dict: Dict = None,
+        image_reference: str,
+        k8s_namespace_name: str,
+        env_vars: Optional[Dict] = None,
+        pod_name: Optional[str] = None,
+        service_account_name: Optional[str] = None,
+        volume_mounts: Optional[List[VolumeSpec]] = None,
+        mapped_dirs: Optional[List[MappedDir]] = None,
     ):
         """
-
-        :param volume_dir:
-        :param upstream_name:
-        :param project_name:
-        :param env_dict:
+        :param image_reference: the pod will use this image
+        :param k8s_namespace_name: name of the namespace to deploy into
+        :param env_vars: additional environment variables to set in the pod
+        :param pod_name: name the pod like this, if not specified, generate something long and ugly
+        :param service_account_name: run the pod using this service account
+        :param volume_mounts: set these volume mounts in the sandbox
+        :param mapped_dirs, a list of mappings between a local dir which should be copied
+                            to the sandbox, and then copied back once all the works is done
         """
-        self.volume_dir = volume_dir
-        self.upstream_name = upstream_name
-        self.env_image_vars = env_dict
-        self.project_name = project_name
-        self.pod_name = None
-        self.api_token = None
-        self.pod_manifest = None
+        self.image_reference: str = image_reference
+        self.service_account_name: Optional[str] = service_account_name
 
-    def get_pod_name_id(self):
-        timestamp = datetime.datetime.now().strftime("-%Y%M%d-%H%M%S%f")
-        return f"{self.upstream_name}-{timestamp}-deployment"
+        self.env_vars = env_vars
+        self.k8s_namespace_name = k8s_namespace_name
 
-    def create_pod_manifest(self):
-        self.pod_name = self.get_pod_name_id()
-        env_image_vars = OpenshiftDeployer.build_env_image_vars(self.env_image_vars)
-        volumeName = f"{self.project_name}-{self.upstream_name}"
-        self.pod_manifest = {
+        # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?
+        self.cleaned_name = (
+            image_reference.replace("/", "-").replace(":", "-").replace(".", "-")
+        )
+        if pod_name:
+            self.pod_name = pod_name
+        else:
+            timestamp = datetime.datetime.now().strftime("%Y%M%d-%H%M%S%f")
+            self.pod_name = f"{self.cleaned_name}-{timestamp}"
+
+        self.api: client.CoreV1Api = self.get_api_client()
+        self.volume_mounts: List[VolumeSpec] = volume_mounts or []
+        self.mapped_dirs: List[MappedDir] = mapped_dirs or []
+
+    def create_pod_manifest(self, command: Optional[List] = None) -> dict:
+        env_image_vars = self.build_env_image_vars(self.env_vars)
+        # this is broken down for sake of mypy
+        container = {
+            "image": self.image_reference,
+            "name": self.pod_name,
+            "env": env_image_vars,
+            "imagePullPolicy": "IfNotPresent",
+            # "volumeMounts": [
+            #     {"mountPath": self.volume_dir, "name": "packit-generator"}
+            # ],
+        }
+        spec = {
+            "containers": [container],
+            "restartPolicy": "Never",
+            # "volumes": [
+            #     {
+            #         "name": "packit-generator",
+            #         "persistentVolumeClaim": {"claimName": "claim.packit"},
+            #     }
+            # ],
+        }
+        pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
             "metadata": {"name": self.pod_name},
-            "spec": {
-                "containers": [
-                    {
-                        "image": self.upstream_name,
-                        "name": self.upstream_name,
-                        "env": env_image_vars,
-                        "volumeMounts": [
-                            {"mountPath": self.volume_dir, "name": volumeName}
-                        ],
-                    }
-                ],
-                "restartPolicy": "Never",
-                "serviceAccountName": "packit-service",
-                "volumes": [
-                    {
-                        "name": volumeName,
-                        "persistentVolumeClaim": {
-                            "claimName": f"claim.{self.project_name}"
-                        },
-                    }
-                ],
-            },
+            "spec": spec,
         }
+        if command:
+            container["command"] = command
+        if self.service_account_name:
+            spec["serviceAccountName"] = self.service_account_name
+        if self.volume_mounts:
+            volume_mounts: List[Dict] = []
+            container["volumeMounts"] = volume_mounts
+            for vol in self.volume_mounts:
+                volume_mounts.append({"mountPath": vol.path, "name": vol.name})
+            volumes: List[Dict] = []
+            spec["volumes"] = volumes
+            for vol in self.volume_mounts:
+                if vol.pvc:
+                    di = {
+                        "name": vol.name,
+                        "persistentVolumeClaim": {"claimName": vol.pvc},
+                    }
+                elif vol.name:
+                    # will this work actually if the volume is created up front?
+                    di = {"name": vol.name}
+                else:
+                    raise RuntimeError(
+                        "Please specified either volume.pvc or volume.name"
+                    )
+                volumes.append(di)
+
+        return pod_manifest
 
     @staticmethod
     def build_env_image_vars(env_dict: Dict) -> List:
@@ -99,127 +180,201 @@ class OpenshiftDeployer(object):
         if not env_dict:
             return []
         for key, value in env_dict.items():
-            if not value:
-                continue
-            if isinstance(value, list):
-                continue
-            env_image_vars.append({"name": key, "value": value})
+            if value:
+                value = str(value)
+            else:
+                value = ""
+            env_image_vars.append({"name": str(key), "value": value})
         return env_image_vars
 
-    def setup_kubernetes(self):
-        logger.debug("Setup kubernetes")
-        config.load_incluster_config()
-        self.api_token = run_command(["oc", "whoami", "-t"], output=True).strip()
+    @staticmethod
+    def get_api_client() -> client.CoreV1Api:
+        """
+        Obtain API client for kubenernetes; if running in a pod,
+        load service account identity, otherwise load kubeconfig
+        """
+        logger.debug("Initialize kubernetes client")
+        if "KUBERNETES_SERVICE_HOST" in os.environ:
+            logger.info("loading incluster config")
+            config.load_incluster_config()
+        else:
+            logger.info("loading kubeconfig")
+            config.load_kube_config()
         configuration = client.Configuration()
-        configuration.api_key["authorization"] = self.api_token
-        configuration.api_key_prefix["authorization"] = "Bearer"
-        self.api = client.CoreV1Api(client.ApiClient(configuration))
+        assert configuration.api_key
+        # example exec.py sets this:
+        # https://github.com/kubernetes-client/python/blob/master/examples/exec.py#L61
+        configuration.assert_hostname = False
+        client.Configuration.set_default(configuration)
+        return client.CoreV1Api()
 
-    def get_response_from_pod(self) -> Dict:
+    def get_response_from_pod(self) -> V1Pod:
         """
         Read info from a pod in a namespace
         :return: JSON Dict
         """
         return self.api.read_namespaced_pod(
-            name=self.pod_name, namespace=self.project_name
+            name=self.pod_name, namespace=self.k8s_namespace_name
         )
 
-    def delete_pod(self) -> Dict:
+    def delete_pod(self):
         """
-        Delete pod in a namespace
-        :return: JSON Dict
-        """
-        return self.api.delete_namespaced_pod(self.pod_name, self.project_name)
+        Delete the sandbox pod.
 
-    def create_pod(self) -> Dict:
-        """
-        Create pod in a namespace
-        :return: JSON dict
-        """
-        return self.api.create_namespaced_pod(
-            body=self.pod_manifest, namespace=self.project_name
-        )
-
-    def is_pod_already_deployed(self):
-        """
-        Check if pod is already deployed
-        :return:
+        :return: response from the API server
         """
         try:
-            resp = self.get_response_from_pod()
-            return resp
+            self.api.delete_namespaced_pod(
+                self.pod_name, self.k8s_namespace_name, body=V1DeleteOptions()
+            )
         except ApiException as e:
-            logger.info(e.status)
+            logger.debug(e)
+            if e.status != 404:
+                raise
+
+    def create_pod(self, pod_manifest: Dict) -> Dict:
+        """
+        Create pod in a namespace
+        :return: response from the API server
+        """
+        return self.api.create_namespaced_pod(
+            body=pod_manifest, namespace=self.k8s_namespace_name
+        )
+
+    def is_pod_already_deployed(self) -> bool:
+        """
+        Check if the pod is already present.
+        """
+        try:
+            self.get_response_from_pod()
+            return True
+        except ApiException as e:
+            logger.debug(e)
             if e.status != 404:
                 logger.error(f"Unknown error: {e!r}")
-                raise GeneratorDeployException
-            else:
-                return None
-
-    def deploy_pod(self):
-        """
-        Deploy POD in namespace
-        :return:
-        """
-        logger.info("Creating POD")
-        resp = self.is_pod_already_deployed()
-
-        if not resp:
-            logger.info(
-                "Pod with name %r does not exist in namespace %r"
-                % (self.pod_name, self.project_name)
-            )
-            resp = self.create_pod()
-            count = 0
-
-            while True:
-                logger.debug("Reading POD %r information" % self.pod_name)
-                resp = self.get_response_from_pod()
-                # Statuses taken from
-                # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
-                if resp.status.phase == "Running":
-                    logger.info("All Containers in the Pod have been created. ")
-                    count = 0
-                if resp.status.phase == "Failed":
-                    logger.info("Container FAILED with failure.")
-                    return False
-                if resp.status.phase == "Succeeded":
-                    logger.info("All Containers in the Pod have terminated in success.")
-                    return True
-                # Wait for a second before another POD check
-                time.sleep(2)
-                count += 1
-                # If POD does not start during 10 seconds, then it probaby faild.
-                if count > 10:
-                    logger.error(
-                        "Deploying POD FAILED."
-                        "Either it does not start or it does not finished yet"
-                        "Status is: %r" % resp.status
-                    )
-                    return False
-        else:
-            logger.error(
-                f"POD with name {self.pod_name!r} "
-                f"already exists in namespace {self.project_name!r}"
-            )
-            return True
-
-    def deploy_image(self):
-        logger.info("Deploying image '%r' into a new POD.", self.upstream_name)
-        if "KUBERNETES_SERVICE_HOST" in os.environ:
-            self.create_pod_manifest()
-            self.setup_kubernetes()
-            result = self.deploy_pod()
-            self.delete_pod()
-            logger.info(f"Pod {self.pod_name!r} was deleted")
-            if not result:
-                logger.error("Running POD FAILED. Check generator logs for reason.")
-                return False
-            logger.info(
-                "Running POD was successful. "
-                f"Check {self.volume_dir} directory for results."
-            )
-            return True
-        else:
-            logger.warning("Generator IS NOT RUNNING in OpenShift.")
+                raise GeneratorDeployException(f"Something's wrong with the pod': {e}")
             return False
+
+    def copy_path_to_pod(self, map: MappedDir):
+        """ copy local path inside the pod """
+        # Copy /tmp/foo local file to /tmp/bar
+        # in a remote pod in namespace <some-namespace>:
+        #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
+        target = f"{self.k8s_namespace_name}/{self.pod_name}:{map.path}"
+        logger.info(f"copy {map.local_dir} -> {target}")
+        # if you're interested: the way openshift does this is that creates a tarball locally
+        # and streams it via exec into the container to a pod process
+        run_command(["oc", "cp", map.local_dir, target])
+
+    def copy_path_from_pod(self, map: MappedDir):
+        """ copy remote path content locally """
+        # Copy /tmp/foo from a remote pod to /tmp/bar locally
+        #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
+        target = f"{self.k8s_namespace_name}/{self.pod_name}:{map.path}"
+        logger.info(f"copy {target} -> {map.local_dir}")
+        run_command(["oc", "cp", target, map.local_dir])
+
+    def deploy_pod(self, command: Optional[List] = None):
+        """
+        Deploy pod into openshift. If it exists already, remove it.
+        Once it starts, sync mapped dirs inside. If the command is set, wait for it to finish.
+        """
+        logger.info("Deploying pod %s", self.pod_name)
+        if self.is_pod_already_deployed():
+            self.delete_pod()
+
+        pod_manifest = self.create_pod_manifest(command=command)
+        self.create_pod(pod_manifest)
+
+        # wait for the pod to start
+        count = 0
+        logger.debug("pod = %r" % self.pod_name)
+        while True:
+            resp = self.get_response_from_pod()
+            # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
+            if resp.status.phase != "Pending":
+                logger.info("pod is no longed pending - status: %s", resp.status.phase)
+                break
+            time.sleep(1)
+            count += 1
+            if count > 30:
+                logger.error(
+                    "The pod did not start on time, " "status = %r" % resp.status
+                )
+                raise RuntimeError(
+                    "The pod did not start in 30 seconds: something's wrong."
+                )
+
+        if resp.status.phase == "Failed":
+            raise RuntimeError("Pod failed, please check logs.")
+
+        if self.mapped_dirs and command:
+            raise RuntimeError(
+                "Since you set your own command, we cannot sync the local dir"
+                " inside because there is a race condition between the pod start"
+                " and the copy process. Please use exec instead."
+            )
+
+        if command:
+            # wait for the pod to finish since the command is set
+            while True:
+                resp = self.get_response_from_pod()
+                # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
+                if resp.status.phase == "Failed":
+                    logger.info(
+                        "The pod has failed execution: you should "
+                        "inspect logs or check `oc describe`"
+                    )
+                    break
+                if resp.status.phase == "Succeeded":
+                    logger.info("All Containers in the pod have finished successfully.")
+                    for m_dir in self.mapped_dirs:
+                        self.copy_path_to_pod(m_dir)
+                    break
+                # TODO: can we use watch instead?
+                time.sleep(1)
+
+    def get_logs(self) -> str:
+        """ provide logs from the pod """
+        return self.api.read_namespaced_pod_log(
+            name=self.pod_name, namespace=self.k8s_namespace_name
+        )
+
+    def run(self, command: Optional[List] = None):
+        """
+        deploy a pod; if a command is set, we wait for it to finish,
+        if the command is not set, sleep process runs in the pod and you can use exec
+        to run commands inside
+
+        :param command: command to run in the pod, if None, run sleep
+        """
+        self.deploy_pod(command=command)
+        logger.info("Sandbox pod is deployed.")
+        return self.get_logs()
+
+    def exec(self, command: List[str]) -> str:
+        """
+        exec a command in a running pod; if any mapped dirs are set,
+        sync the dirs before and after the execution
+
+        :param command: command to run
+        :returns logs
+        """
+        # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
+        for m_dir in self.mapped_dirs:
+            self.copy_path_to_pod(m_dir)
+        # FIXME: we're unable to get RC of the exec
+        response = stream(
+            self.api.connect_get_namespaced_pod_exec,
+            self.pod_name,
+            self.k8s_namespace_name,
+            # async_req=True,
+            command=command,
+            stderr=True,
+            stdout=True,
+            tty=False,
+        )
+        logger.debug("exec response = %r" % response)
+        for m_dir in self.mapped_dirs:
+            self.copy_path_from_pod(m_dir)
+        return response

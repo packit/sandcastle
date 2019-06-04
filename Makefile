@@ -1,10 +1,10 @@
-.PHONY: image-build test-build test-in-container image-push exec-test clean
+.PHONY: build test-build test-in-container push exec-test clean
 
 IMAGE_NAME = docker.io/usercont/packit-generator
-TEST_IMAGE_NAME = packit-generator-test
+TEST_IMAGE_NAME = docker.io/usercont/packit-generator-test
 TEST_TARGET = ./tests
 
-test-build: image-build
+test-image-build: build
 	docker build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
 
 test-in-container: test-build
@@ -16,10 +16,10 @@ test-in-container: test-build
 exec-test:
 	pytest $(TEST_TARGET)
 
-image-build:
+build:
 	docker build --tag ${IMAGE_NAME} .
 
-image-push: image-build
+push: build
 	docker push ${IMAGE_NAME}
 
 clean:

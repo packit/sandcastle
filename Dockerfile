@@ -10,18 +10,14 @@ FROM registry.fedoraproject.org/fedora:30
 
 ENV LANG=en_US.UTF-8 \
     PYTHONDONTWRITEBYTECODE=yes \
-    HOME=/tmp/packit-generator
+    WORKDIR=/tmp/packit-generator
 
-COPY requirements.sh files/packit-run.sh ${HOME}/
+COPY requirements.sh files/packit-run.sh ${WORKDIR}/
 
-WORKDIR ${HOME}
+WORKDIR ${WORKDIR}
 
 RUN bash requirements.sh && \
     dnf clean all
-
-COPY . ${HOME}
-
-RUN pip3 install .
 
 # Run this image with sleep 3600.
 # Packit service calls actions by `oc exec` inside this image

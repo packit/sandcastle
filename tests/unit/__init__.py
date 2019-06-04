@@ -23,5 +23,5 @@
 
 from generator.utils import set_logging
 
-# set logging to debug while testing
 set_logging(level=10)
+set_logging(logger_name="tests", level=10)

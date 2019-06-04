@@ -179,11 +179,6 @@ def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
     assert od.is_pod_already_deployed()
 
 
-def test_pod_deploy_not_in_openshift(init_openshift_deployer, pod_not_deployed):
-    od = init_openshift_deployer
-    assert not od.deploy_image()
-
-
 @pytest.mark.parametrize(
     "env_dict,env_image_vars",
     [
@@ -192,8 +187,9 @@ def test_pod_deploy_not_in_openshift(init_openshift_deployer, pod_not_deployed):
             [{"name": "DOWNSTREAM_IMAGE", "value": "FOOBAR"}],
         ),
         ({}, []),
-        ({"NAME": ["VAL1, VAL2"]}, []),
-        ({"NAME": []}, []),
+        ({"NAME": ""}, [{"name": "NAME", "value": ""}]),
+        ({"NAME": None}, [{"name": "NAME", "value": ""}]),
+        ({"NAME": [("a", "b")]}, [{"name": "NAME", "value": "[('a', 'b')]"}]),
     ],
 )
 def test_env_image_vars(env_dict, env_image_vars):
@@ -201,40 +197,26 @@ def test_env_image_vars(env_dict, env_image_vars):
 
 
 def test_manifest(init_openshift_deployer):
-    od = init_openshift_deployer
+    od: OpenshiftDeployer = init_openshift_deployer
     assert od
     KEY = "UPSTREAM_NAME"
     VALUE = "COLIN"
-    DEPLOY_NAME = "generator-123435-deployment"
     expected_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {"name": DEPLOY_NAME},
+        "metadata": {"name": od.pod_name},
         "spec": {
             "containers": [
                 {
-                    "image": od.upstream_name,
-                    "name": od.upstream_name,
+                    "image": od.image_reference,
+                    "name": od.pod_name,
                     "env": [{"name": KEY, "value": VALUE}],
-                    "volumeMounts": [
-                        {
-                            "mountPath": f"{od.volume_dir}",
-                            "name": f"{od.project_name}-{od.upstream_name}",
-                        }
-                    ],
+                    "imagePullPolicy": "IfNotPresent",
                 }
             ],
             "restartPolicy": "Never",
-            "serviceAccountName": "packit-service",
-            "volumes": [
-                {
-                    "name": f"{od.project_name}-{od.upstream_name}",
-                    "persistentVolumeClaim": {"claimName": f"claim.{od.project_name}"},
-                }
-            ],
         },
     }
-    flexmock(od).should_receive("get_pod_name_id").and_return(DEPLOY_NAME)
-    od.env_image_vars = {KEY: VALUE}
-    od.create_pod_manifest()
-    assert od.pod_manifest == expected_manifest
+    od.env_vars = {KEY: VALUE}
+    pod_manifest = od.create_pod_manifest()
+    assert pod_manifest == expected_manifest
