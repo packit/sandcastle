@@ -23,13 +23,12 @@
 import pytest
 from generator.deploy_openshift_pod import OpenshiftDeployer
 
-VOLUME_DIR = "/tmp"
+NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
-UPSTREAM_NAME = "generator"
 
 
 @pytest.fixture()
 def init_openshift_deployer():
     return OpenshiftDeployer(
-        volume_dir=VOLUME_DIR, project_name=PROJECT_NAME, upstream_name=UPSTREAM_NAME
+        image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME
     )

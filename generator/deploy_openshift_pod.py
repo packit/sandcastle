@@ -180,7 +180,11 @@ class OpenshiftDeployer(object):
         if not env_dict:
             return []
         for key, value in env_dict.items():
-            env_image_vars.append({"name": str(key), "value": str(value) or ""})
+            if value:
+                value = str(value)
+            else:
+                value = ""
+            env_image_vars.append({"name": str(key), "value": value})
         return env_image_vars
 
     @staticmethod
