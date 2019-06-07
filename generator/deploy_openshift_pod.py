@@ -37,6 +37,7 @@ We came up with these solutions:
 """
 
 import datetime
+import json
 import logging
 import os
 import time
@@ -46,8 +47,9 @@ from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
+from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
-from generator.exceptions import GeneratorDeployException
+from generator.exceptions import GeneratorDeployException, SandboxCommandFailed
 from generator.utils import run_command
 
 logger = logging.getLogger(__name__)
@@ -274,6 +276,14 @@ class OpenshiftDeployer(object):
         logger.info(f"copy {target} -> {map.local_dir}")
         run_command(["oc", "cp", target, map.local_dir])
 
+    @staticmethod
+    def get_rc_from_v1pod(resp: V1Pod) -> int:
+        try:
+            return resp.status.container_statuses[0].state.terminated.exit_code
+        except (AttributeError, IndexError) as ex:
+            logger.error("status has incorrect structure: %r", ex)
+            return 999
+
     def deploy_pod(self, command: Optional[List] = None):
         """
         Deploy pod into openshift. If it exists already, remove it.
@@ -306,7 +316,22 @@ class OpenshiftDeployer(object):
                 )
 
         if resp.status.phase == "Failed":
-            raise RuntimeError("Pod failed, please check logs.")
+            # > resp.status.container_statuses[0].state
+            # {'running': None,
+            #  'terminated': {'container_id': 'docker://f3828...
+            #                 'exit_code': 2,
+            #                 'finished_at': datetime.datetime(2019, 6, 7,...
+            #                 'message': None,
+            #                 'reason': 'Error',
+            #                 'signal': None,
+            #                 'started_at': datetime.datetime(2019, 6, 7,...
+            #  'waiting': None}
+
+            raise SandboxCommandFailed(
+                output=self.get_logs(),
+                reason=str(resp.status),
+                rc=self.get_rc_from_v1pod(resp),
+            )
 
         if self.mapped_dirs and command:
             raise RuntimeError(
@@ -325,7 +350,11 @@ class OpenshiftDeployer(object):
                         "The pod has failed execution: you should "
                         "inspect logs or check `oc describe`"
                     )
-                    break
+                    raise SandboxCommandFailed(
+                        output=self.get_logs(),
+                        reason=str(resp.status),
+                        rc=self.get_rc_from_v1pod(resp),
+                    )
                 if resp.status.phase == "Succeeded":
                     logger.info("All Containers in the pod have finished successfully.")
                     for m_dir in self.mapped_dirs:
@@ -364,16 +393,50 @@ class OpenshiftDeployer(object):
         for m_dir in self.mapped_dirs:
             self.copy_path_to_pod(m_dir)
         # FIXME: we're unable to get RC of the exec
-        response = stream(
+        ws_client: WSClient = stream(
             self.api.connect_get_namespaced_pod_exec,
             self.pod_name,
             self.k8s_namespace_name,
             # async_req=True,
             command=command,
+            stdin=False,
             stderr=True,
             stdout=True,
             tty=False,
+            _preload_content=False,  # <<< we need a client object
         )
+
+        # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
+        ws_client.run_forever(timeout=60)
+        errors = ws_client.read_channel(ERROR_CHANNEL)
+        # read_all would consume ERR_CHANNEL, so read_all needs to be last
+        response = ws_client.read_all()
+        if errors:
+            # errors = '{"metadata":{},"status":"Success"}'
+            j = json.loads(errors)
+            status = j.get("status", None)
+            if status == "Success":
+                logger.info("exec command succeeded, yay!")
+            elif status == "Failure":
+                logger.info("exec command failed")
+                # ('{"metadata":{},"status":"Failure","message":"command terminated with '
+                #  'non-zero exit code: Error executing in Docker Container: '
+                #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
+                causes = j.get("details", {}).get("causes", [])
+                rc = 999
+                for c in causes:
+                    if c.get("reason", None) == "ExitCode":
+                        try:
+                            rc = int(c.get("message", None))
+                        except ValueError:
+                            rc = 999
+                raise SandboxCommandFailed(output=response, reason=errors, rc=rc)
+            else:
+                logger.warning(
+                    "exec didn't yield the metadata we expect, mighty suspicous, %s",
+                    errors,
+                )
+
         logger.debug("exec response = %r" % response)
         for m_dir in self.mapped_dirs:
             self.copy_path_from_pod(m_dir)

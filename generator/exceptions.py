@@ -21,5 +21,23 @@
 # SOFTWARE.
 
 
-class GeneratorDeployException(Exception):
+class SandboxException(Exception):
+    """ There was an issue during execution. """
+
+
+class GeneratorDeployException(SandboxException):
     pass
+
+
+class SandboxCommandFailed(SandboxException):
+    """ The command executed in sandbox failed. """
+
+    def __init__(self, output: str, reason: str, rc: int):
+        """
+        :param output: output of the command
+        :param reason: reason the command failed
+        :param rc: return code
+        """
+        self.output: str = output
+        self.reason: str = reason
+        self.rc: int = rc
