@@ -47,8 +47,10 @@ def test_run_failure():
             ex.value.output
             == "ls: cannot access '/hauskrecht': No such file or directory\n"
         )
+        assert isinstance(ex.value, SandboxCommandFailed)
         assert "'exit_code': 2" in ex.value.reason
         assert "'reason': 'Error'" in ex.value.reason
+        assert ex.value.rc == 2
     finally:
         o.delete_pod()
 
@@ -63,9 +65,11 @@ def test_exec_failure():
             ex.value.output
             == "ls: cannot access '/hauskrecht': No such file or directory\n"
         )
+        assert isinstance(ex.value, SandboxCommandFailed)
         assert "2" in ex.value.reason
         assert "ExitCode" in ex.value.reason
         assert "NonZeroExitCode" in ex.value.reason
+        assert ex.value.rc == 2
     finally:
         o.delete_pod()
 

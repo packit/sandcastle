@@ -276,6 +276,14 @@ class OpenshiftDeployer(object):
         logger.info(f"copy {target} -> {map.local_dir}")
         run_command(["oc", "cp", target, map.local_dir])
 
+    @staticmethod
+    def get_rc_from_v1pod(resp: V1Pod) -> int:
+        try:
+            return resp.status.container_statuses[0].state.terminated.exit_code
+        except (AttributeError, IndexError) as ex:
+            logger.error("status has incorrect structure: %r", ex)
+            return 999
+
     def deploy_pod(self, command: Optional[List] = None):
         """
         Deploy pod into openshift. If it exists already, remove it.
@@ -308,7 +316,22 @@ class OpenshiftDeployer(object):
                 )
 
         if resp.status.phase == "Failed":
-            raise SandboxCommandFailed(output=self.get_logs(), reason=str(resp.status))
+            # > resp.status.container_statuses[0].state
+            # {'running': None,
+            #  'terminated': {'container_id': 'docker://f3828...
+            #                 'exit_code': 2,
+            #                 'finished_at': datetime.datetime(2019, 6, 7,...
+            #                 'message': None,
+            #                 'reason': 'Error',
+            #                 'signal': None,
+            #                 'started_at': datetime.datetime(2019, 6, 7,...
+            #  'waiting': None}
+
+            raise SandboxCommandFailed(
+                output=self.get_logs(),
+                reason=str(resp.status),
+                rc=self.get_rc_from_v1pod(resp),
+            )
 
         if self.mapped_dirs and command:
             raise RuntimeError(
@@ -328,7 +351,9 @@ class OpenshiftDeployer(object):
                         "inspect logs or check `oc describe`"
                     )
                     raise SandboxCommandFailed(
-                        output=self.get_logs(), reason=str(resp.status)
+                        output=self.get_logs(),
+                        reason=str(resp.status),
+                        rc=self.get_rc_from_v1pod(resp),
                     )
                 if resp.status.phase == "Succeeded":
                     logger.info("All Containers in the pod have finished successfully.")
@@ -393,12 +418,19 @@ class OpenshiftDeployer(object):
             if status == "Success":
                 logger.info("exec command succeeded, yay!")
             elif status == "Failure":
-                logger.info("exec command has failed")
+                logger.info("exec command failed")
                 # ('{"metadata":{},"status":"Failure","message":"command terminated with '
                 #  'non-zero exit code: Error executing in Docker Container: '
                 #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
-                # e = json.loads(errors)
-                raise SandboxCommandFailed(output=response, reason=errors)
+                causes = j.get("details", {}).get("causes", [])
+                rc = 999
+                for c in causes:
+                    if c.get("reason", None) == "ExitCode":
+                        try:
+                            rc = int(c.get("message", None))
+                        except ValueError:
+                            rc = 999
+                raise SandboxCommandFailed(output=response, reason=errors, rc=rc)
             else:
                 logger.warning(
                     "exec didn't yield the metadata we expect, mighty suspicous, %s",
