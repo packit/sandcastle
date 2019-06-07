@@ -89,6 +89,25 @@ def test_local_path_e2e_inside_w_exec(tmpdir):
         o.delete_pod()
 
 
+def test_file_got_changed(tmpdir):
+    m_dir = MappedDir()
+    m_dir.local_dir = str(tmpdir.mkdir("stark"))
+    m_dir.path = "/tmp/stark"
+
+    p = Path(m_dir.local_dir).joinpath("qwe")
+    p.write_text("Hello, Tony!")
+
+    o = OpenshiftDeployer(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
+    )
+    o.run()
+    try:
+        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>/tmp/stark/qwe"])
+        assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.parametrize(
     "test_name",
     (
@@ -96,6 +115,7 @@ def test_local_path_e2e_inside_w_exec(tmpdir):
         "test_exec_failure",
         "test_run_failure",
         "test_local_path_e2e_inside_w_exec",
+        "test_file_got_changed",
     ),
 )
 def test_from_pod(test_name):
