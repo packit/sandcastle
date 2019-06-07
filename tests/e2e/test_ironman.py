@@ -24,16 +24,48 @@ from pathlib import Path
 import pytest
 
 from generator.deploy_openshift_pod import OpenshiftDeployer, MappedDir
+from generator.exceptions import SandboxCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
 
 def test_basic_e2e_inside():
-    """ this part is meant to run inside an openshift pod """
     o = OpenshiftDeployer(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, pod_name="lllollz"
     )
     try:
         o.run(command=["ls", "-lha"])
+    finally:
+        o.delete_pod()
+
+
+def test_run_failure():
+    o = OpenshiftDeployer(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    try:
+        with pytest.raises(SandboxCommandFailed) as ex:
+            o.run(command=["ls", "/hauskrecht"])
+        assert (
+            ex.value.output
+            == "ls: cannot access '/hauskrecht': No such file or directory\n"
+        )
+        assert "'exit_code': 2" in ex.value.reason
+        assert "'reason': 'Error'" in ex.value.reason
+    finally:
+        o.delete_pod()
+
+
+def test_exec_failure():
+    o = OpenshiftDeployer(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    try:
+        with pytest.raises(SandboxCommandFailed) as ex:
+            o.exec(command=["ls", "/hauskrecht"])
+        assert (
+            ex.value.output
+            == "ls: cannot access '/hauskrecht': No such file or directory\n"
+        )
+        assert "2" in ex.value.reason
+        assert "ExitCode" in ex.value.reason
+        assert "NonZeroExitCode" in ex.value.reason
     finally:
         o.delete_pod()
 
@@ -51,15 +83,22 @@ def test_local_path_e2e_inside_w_exec(tmpdir):
     )
     o.run()
     try:
-        o.exec(command=["ls", "/tmp/stark/qwe"])
+        out = o.exec(command=["ls", "/tmp/stark/qwe"])
+        assert "qwe" in out
     finally:
         o.delete_pod()
 
 
 @pytest.mark.parametrize(
-    "test_name", ("test_basic_e2e_inside", "test_local_path_e2e_inside_w_exec")
+    "test_name",
+    (
+        "test_basic_e2e_inside",
+        "test_exec_failure",
+        "test_run_failure",
+        "test_local_path_e2e_inside_w_exec",
+    ),
 )
-def test_basic_e2e(test_name):
+def test_from_pod(test_name):
     """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
     build_now()
     path = f"tests/e2e/test_ironman.py::{test_name}"
