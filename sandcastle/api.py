@@ -49,8 +49,8 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
-from generator.exceptions import GeneratorDeployException, SandboxCommandFailed
-from generator.utils import run_command
+from sandcastle.exceptions import SandcastleCommandFailed, SandcastleExecutionError
+from sandcastle.utils import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class MappedDir:
     local_dir: str = ""
 
 
-class OpenshiftDeployer(object):
+class Sandcastle(object):
     def __init__(
         self,
         image_reference: str,
@@ -129,7 +129,7 @@ class OpenshiftDeployer(object):
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
             # "volumeMounts": [
-            #     {"mountPath": self.volume_dir, "name": "packit-generator"}
+            #     {"mountPath": self.volume_dir, "name": "packit-sandcastle"}
             # ],
         }
         spec = {
@@ -137,7 +137,7 @@ class OpenshiftDeployer(object):
             "restartPolicy": "Never",
             # "volumes": [
             #     {
-            #         "name": "packit-generator",
+            #         "name": "packit-sandcastle",
             #         "persistentVolumeClaim": {"claimName": "claim.packit"},
             #     }
             # ],
@@ -254,7 +254,7 @@ class OpenshiftDeployer(object):
             logger.debug(e)
             if e.status != 404:
                 logger.error(f"Unknown error: {e!r}")
-                raise GeneratorDeployException(f"Something's wrong with the pod': {e}")
+                raise SandcastleExecutionError(f"Something's wrong with the pod': {e}")
             return False
 
     def copy_path_to_pod(self, map: MappedDir):
@@ -327,7 +327,7 @@ class OpenshiftDeployer(object):
             #                 'started_at': datetime.datetime(2019, 6, 7,...
             #  'waiting': None}
 
-            raise SandboxCommandFailed(
+            raise SandcastleCommandFailed(
                 output=self.get_logs(),
                 reason=str(resp.status),
                 rc=self.get_rc_from_v1pod(resp),
@@ -350,7 +350,7 @@ class OpenshiftDeployer(object):
                         "The pod has failed execution: you should "
                         "inspect logs or check `oc describe`"
                     )
-                    raise SandboxCommandFailed(
+                    raise SandcastleCommandFailed(
                         output=self.get_logs(),
                         reason=str(resp.status),
                         rc=self.get_rc_from_v1pod(resp),
@@ -430,7 +430,7 @@ class OpenshiftDeployer(object):
                             rc = int(c.get("message", None))
                         except ValueError:
                             rc = 999
-                raise SandboxCommandFailed(output=response, reason=errors, rc=rc)
+                raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
             else:
                 logger.warning(
                     "exec didn't yield the metadata we expect, mighty suspicous, %s",

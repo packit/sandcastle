@@ -23,8 +23,7 @@ import pytest
 from flexmock import flexmock
 
 from kubernetes.client.rest import ApiException
-from generator.deploy_openshift_pod import OpenshiftDeployer
-from generator.exceptions import GeneratorDeployException
+from sandcastle import Sandcastle, SandcastleExecutionError
 
 
 @pytest.fixture()
@@ -34,9 +33,9 @@ def pod_not_deployed():
         "apiVersion": "v1",
         "metadata": {},
         "status": "Failure",
-        "message": 'pods "generator" not found',
+        "message": 'pods "sandcastle" not found',
         "reason": "NotFound",
-        "details": {"name": "generator", "kind": "pods"},
+        "details": {"name": "sandcastle", "kind": "pods"},
         "code": 404,
     }
 
@@ -47,29 +46,29 @@ def pod_json_deployed():
         "kind": "Pod",
         "apiVersion": "v1",
         "metadata": {
-            "name": "generator-5-qh85r",
-            "generateName": "generator-5-",
+            "name": "sandcastle-5-qh85r",
+            "generateName": "sandcastle-5-",
             "namespace": "PROJECT_NAME",
-            "selfLink": "/api/v1/namespaces/PROJECT_NAME/pods/generator-5-qh85r",
+            "selfLink": "/api/v1/namespaces/PROJECT_NAME/pods/sandcastle-5-qh85r",
             "uid": "6d5ad24a-81d6-11e9-a2fa-fa163ed2928c",
             "resourceVersion": "488154842",
             "creationTimestamp": "2019-05-29T05:55:56Z",
             "labels": {
-                "deployment": "generator-5",
-                "deploymentconfig": "generator",
-                "io.openshift.tags": "generator",
+                "deployment": "sandcastle-5",
+                "deploymentconfig": "sandcastle",
+                "io.openshift.tags": "sandcastle",
             },
             "annotations": {
                 "openshift.io/deployment-config.latest-version": "5",
-                "openshift.io/deployment-config.name": "generator",
-                "openshift.io/deployment.name": "generator-5",
+                "openshift.io/deployment-config.name": "sandcastle",
+                "openshift.io/deployment.name": "sandcastle-5",
                 "openshift.io/scc": "restricted",
             },
             "ownerReferences": [
                 {
                     "apiVersion": "v1",
                     "kind": "ReplicationController",
-                    "name": "generator-5",
+                    "name": "sandcastle-5",
                     "uid": "f4204b91-5c38-11e9-ac31-fa163ed2928c",
                     "controller": "true",
                     "blockOwnerDeletion": "true",
@@ -79,14 +78,14 @@ def pod_json_deployed():
         "spec": {
             "volumes": [
                 {
-                    "name": "packit-generator",
-                    "persistentVolumeClaim": {"claimName": "claim.generator"},
+                    "name": "packit-sandcastle",
+                    "persistentVolumeClaim": {"claimName": "claim.sandcastle"},
                 }
             ],
             "containers": [
                 {
-                    "name": "generator",
-                    "image": "docker.io/usercont/generator",
+                    "name": "sandcastle",
+                    "image": "docker.io/usercont/sandcastle",
                     "env": [
                         {
                             "name": "NAMESPACE",
@@ -101,8 +100,8 @@ def pod_json_deployed():
                     },
                     "volumeMounts": [
                         {
-                            "name": "packit-generator",
-                            "mountPath": "/tmp/packit-generator",
+                            "name": "packit-sandcastle",
+                            "mountPath": "/tmp/packit-sandcastle",
                         }
                     ],
                     "terminationMessagePath": "/dev/termination-log",
@@ -114,9 +113,9 @@ def pod_json_deployed():
             "terminationGracePeriodSeconds": 30,
             "dnsPolicy": "ClusterFirst",
             "nodeSelector": {"region": "compute"},
-            "serviceAccountName": "generator",
-            "serviceAccount": "generator",
-            "imagePullSecrets": [{"name": "generator-dockercfg-4bqcm"}],
+            "serviceAccountName": "sandcastle",
+            "serviceAccount": "sandcastle",
+            "imagePullSecrets": [{"name": "sandcastle-dockercfg-4bqcm"}],
             "schedulerName": "default-scheduler",
             "tolerations": [
                 {
@@ -131,14 +130,14 @@ def pod_json_deployed():
             "startTime": "2019-05-29T05:55:56Z",
             "containerStatuses": [
                 {
-                    "name": "generator",
+                    "name": "sandcastle",
                     "state": {"running": {"startedAt": "2019-05-29T05:56:29Z"}},
                     "lastState": {},
                     "ready": "true",
                     "restartCount": 0,
-                    "image": "docker.io/usercont/generator:latest",
+                    "image": "docker.io/usercont/sandcastle:latest",
                     "imageID": "docker-pullable://docker.io/usercont/"
-                    "generator@sha256:51289119edf387c47ed149"
+                    "sandcastle@sha256:51289119edf387c47ed149"
                     "eb3382c23f4115bc343adcaaa6e1731d269b6ec70a",
                     "containerID": "docker://201ad777bb6d36077590fed8796"
                     "bcd6170a62833c124467a1ffa2af4c60f1272",
@@ -169,7 +168,7 @@ def test_is_pod_already_deployed(init_openshift_deployer):
     flexmock(od).should_receive("get_response_from_pod").and_raise(
         ApiException(status=200, reason="POD already exists")
     )
-    with pytest.raises(GeneratorDeployException):
+    with pytest.raises(SandcastleExecutionError):
         od.is_pod_already_deployed()
 
 
@@ -193,11 +192,11 @@ def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
     ],
 )
 def test_env_image_vars(env_dict, env_image_vars):
-    assert OpenshiftDeployer.build_env_image_vars(env_dict=env_dict) == env_image_vars
+    assert Sandcastle.build_env_image_vars(env_dict=env_dict) == env_image_vars
 
 
 def test_manifest(init_openshift_deployer):
-    od: OpenshiftDeployer = init_openshift_deployer
+    od: Sandcastle = init_openshift_deployer
     assert od
     KEY = "UPSTREAM_NAME"
     VALUE = "COLIN"

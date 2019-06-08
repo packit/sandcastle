@@ -1,25 +1,24 @@
-# This image is going to be used by packit-service
-# for running 'actions' used by packit.
-# Once packit service receives a webhook or a fedmsg
-# then if packit.yaml configuration file in upstream
-# repo contains some actions, then this image is run
-# and actions are executed in alone POD.
-# The aim of this image is to secure running actions in another POD
-# so we will not destroy our packit-service instances.
+# This is the default sandbox container image.
+# It should contain basic utilities, such as git, make, rpmbuild, etc.
+# Untrusted commands are meant to run in this container.
 FROM registry.fedoraproject.org/fedora:30
 
+# ANSIBLE_STDOUT_CALLBACK - nicer output from the playbook run
 ENV LANG=en_US.UTF-8 \
     PYTHONDONTWRITEBYTECODE=yes \
-    WORKDIR=/tmp/packit-generator
-
-COPY requirements.sh files/packit-run.sh ${WORKDIR}/
+    WORKDIR=/src \
+    ANSIBLE_STDOUT_CALLBACK=debug
 
 WORKDIR ${WORKDIR}
 
-RUN bash requirements.sh && \
-    dnf clean all
+RUN dnf install -y ansible
+# Ansible doesn't like /tmp
+COPY files/install-rpm-packages.yaml /src/files/install-rpm-packages.yaml
 
-# Run this image with sleep 3600.
-# Packit service calls actions by `oc exec` inside this image
-# so we secure source generation.
-CMD ["/tmp/packit-generator/packit-run.sh"]
+RUN cd /src/ \
+    && ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml
+    && dnf clean all
+
+COPY files/container-cmd.sh /src/
+# default command is sleep - so users can do .exec(command=[...])
+CMD ["/src/container-cmd.sh"]

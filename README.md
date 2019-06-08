@@ -1,6 +1,6 @@
-# Generator used by packit-service
+# Sandcastle
 
-Run untrusted code in a sandbox - an OpenShift pod.
+Run untrusted code in a castle (OpenShift pod), which stands in a sandbox.
 
 
 ## Usage
@@ -14,13 +14,13 @@ $ oc status
 The simplest use case is to invoke a command in a new openshift pod:
 
 ```python
-from generator.deploy_openshift_pod import OpenshiftDeployer
+from sandcastle import Sandcastle
 
-od = OpenshiftDeployer(
+s = Sandcastle(
     image_reference="docker.io/this-is-my/image:latest",
     k8s_namespace_name="myproject"
 )
-output = od.run(command=["ls", "-lha"])
+output = s.run(command=["ls", "-lha"])
 ```
 
 These things will happen:
@@ -36,19 +36,19 @@ These things will happen:
 You may be interested in sharing data from your current environment inside the sandbox.
 
 ```python
-from generator.deploy_openshift_pod import OpenshiftDeployer
+from sandcastle import Sandcastle, MappedDir
 
 map = MappedDir()
 map.local_dir = "/path/to/local/dir"
 map.path = "/tmp/dir"
 
-od = OpenshiftDeployer(
+s = Sandcastle(
     image_reference="docker.io/this-is-my/image:latest",
     k8s_namespace_name="myproject",
     mapped_dirs=[map]
 )
-od.run()
-od.exec(["bash", "-c", "cd /tmp/dir && ls -lha"])
+s.run()
+s.exec(["bash", "-c", "cd /tmp/dir && ls -lha"])
 ```
 
 Notes:

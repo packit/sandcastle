@@ -23,13 +23,13 @@ from pathlib import Path
 
 import pytest
 
-from generator.deploy_openshift_pod import OpenshiftDeployer, MappedDir
-from generator.exceptions import SandboxCommandFailed
+from sandcastle import Sandcastle, MappedDir
+from sandcastle.exceptions import SandcastleCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
 
 def test_basic_e2e_inside():
-    o = OpenshiftDeployer(
+    o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, pod_name="lllollz"
     )
     try:
@@ -39,15 +39,15 @@ def test_basic_e2e_inside():
 
 
 def test_run_failure():
-    o = OpenshiftDeployer(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     try:
-        with pytest.raises(SandboxCommandFailed) as ex:
+        with pytest.raises(SandcastleCommandFailed) as ex:
             o.run(command=["ls", "/hauskrecht"])
         assert (
             ex.value.output
             == "ls: cannot access '/hauskrecht': No such file or directory\n"
         )
-        assert isinstance(ex.value, SandboxCommandFailed)
+        assert isinstance(ex.value, SandcastleCommandFailed)
         assert "'exit_code': 2" in ex.value.reason
         assert "'reason': 'Error'" in ex.value.reason
         assert ex.value.rc == 2
@@ -56,16 +56,16 @@ def test_run_failure():
 
 
 def test_exec_failure():
-    o = OpenshiftDeployer(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     o.run()
     try:
-        with pytest.raises(SandboxCommandFailed) as ex:
+        with pytest.raises(SandcastleCommandFailed) as ex:
             o.exec(command=["ls", "/hauskrecht"])
         assert (
             ex.value.output
             == "ls: cannot access '/hauskrecht': No such file or directory\n"
         )
-        assert isinstance(ex.value, SandboxCommandFailed)
+        assert isinstance(ex.value, SandcastleCommandFailed)
         assert "2" in ex.value.reason
         assert "ExitCode" in ex.value.reason
         assert "NonZeroExitCode" in ex.value.reason
@@ -82,7 +82,7 @@ def test_local_path_e2e_inside_w_exec(tmpdir):
     p = Path(m_dir.local_dir)
     p.joinpath("qwe").write_text("Hello, Tony!")
 
-    o = OpenshiftDeployer(
+    o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
     )
     o.run()
@@ -101,7 +101,7 @@ def test_file_got_changed(tmpdir):
     p = Path(m_dir.local_dir).joinpath("qwe")
     p.write_text("Hello, Tony!")
 
-    o = OpenshiftDeployer(
+    o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
     )
     o.run()

@@ -27,22 +27,20 @@ from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions
 from kubernetes.client.rest import ApiException
 
-from generator.deploy_openshift_pod import OpenshiftDeployer
-from generator.utils import run_command
+from sandcastle.api import Sandcastle
+from sandcastle.utils import run_command
 
 NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
-SANDBOX_IMAGE = "docker.io/usercont/packit-generator"
-TEST_IMAGE_NAME = "docker.io/usercont/packit-generator-test"
+SANDBOX_IMAGE = "docker.io/usercont/packit-sandcastle"
+TEST_IMAGE_NAME = "docker.io/usercont/packit-sandcastle-test"
 POD_NAME = "test-orchestrator"
 NAMESPACE = "myproject"
 
 
 @pytest.fixture()
 def init_openshift_deployer():
-    return OpenshiftDeployer(
-        image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME
-    )
+    return Sandcastle(image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME)
 
 
 def run_test_within_pod(test_path: str):
@@ -114,7 +112,7 @@ def run_test_within_pod(test_path: str):
 
 
 def build_now():
-    """ build a container image with generator """
+    """ build a container image with sandcastle """
     project_root = Path(__file__).parent.parent
     run_command(
         [

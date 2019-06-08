@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 
-from generator.utils import set_logging
+from sandcastle.utils import set_logging
 
 set_logging(level=10)
 set_logging(logger_name="tests", level=10)
