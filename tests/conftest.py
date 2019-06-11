@@ -32,8 +32,8 @@ from sandcastle.utils import run_command
 
 NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
-SANDBOX_IMAGE = "docker.io/usercont/packit-sandcastle"
-TEST_IMAGE_NAME = "docker.io/usercont/packit-sandcastle-test"
+SANDBOX_IMAGE = "docker.io/usercont/sandcastle"
+TEST_IMAGE_NAME = "docker.io/usercont/sandcastle-tests"
 POD_NAME = "test-orchestrator"
 NAMESPACE = "myproject"
 

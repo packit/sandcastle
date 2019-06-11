@@ -12,11 +12,14 @@ ENV LANG=en_US.UTF-8 \
 WORKDIR ${WORKDIR}
 
 RUN dnf install -y ansible
-# Ansible doesn't like /tmp
-COPY files/install-rpm-packages.yaml /src/files/install-rpm-packages.yaml
 
-RUN cd /src/ \
-    && ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml
+COPY files/install-rpm-packages.yaml /src/files/install-rpm-packages.yaml
+COPY tests/requirements.txt /src/tests/requirements.txt
+
+# assert
+RUN ls tests/requirements.txt
+
+RUN ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml \
     && dnf clean all
 
 COPY files/container-cmd.sh /src/

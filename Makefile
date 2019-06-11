@@ -1,7 +1,7 @@
 .PHONY: build test-build test-in-container push exec-test clean
 
 IMAGE_NAME = docker.io/usercont/sandcastle
-TEST_IMAGE_NAME = docker.io/usercont/sandcastle
+TEST_IMAGE_NAME = docker.io/usercont/sandcastle-tests
 TEST_TARGET = ./tests
 
 test-image-build: build

@@ -31,4 +31,4 @@
   - name:
     pip:
       executable: /usr/bin/pip3
-      requirements: tests/requirements.txt
+      requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
