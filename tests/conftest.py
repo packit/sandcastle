@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import pytest
+import urllib3
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions
 from kubernetes.client.rest import ApiException
@@ -36,6 +37,10 @@ SANDBOX_IMAGE = "docker.io/usercont/sandcastle"
 TEST_IMAGE_NAME = "docker.io/usercont/sandcastle-tests"
 POD_NAME = "test-orchestrator"
 NAMESPACE = "myproject"
+
+
+# exterminate!
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 @pytest.fixture()
