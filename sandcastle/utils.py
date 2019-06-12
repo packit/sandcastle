@@ -75,7 +75,7 @@ class GeneratorFormatter(logging.Formatter):
 
 
 def set_logging(
-    logger_name="generator",
+    logger_name="sandcastle",
     level=logging.INFO,
     handler_class=logging.StreamHandler,
     handler_kwargs=None,

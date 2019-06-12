@@ -1,8 +1,16 @@
 ---
-- name: Install dependencies for generator.
+- name: Install dependencies for sandcastle.
   hosts: all
   tasks:
-  - name: Install all RPM packages needed to hack on generator.
+  - name: Install basic utilities which should be in a sandbox.
+    dnf:
+      name:
+      - make
+      - git
+      - packit
+      - rpmdevtools
+      state: present
+  - name: Install all RPM packages needed to hack on sandcastle.
     dnf:
       name:
       - git
@@ -18,3 +26,9 @@
       - python3-pytest  # tests
       - python3-flexmock
       state: present
+    tags:
+    - with-sandcastle-deps
+  - name:
+    pip:
+      executable: /usr/bin/pip3
+      requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"

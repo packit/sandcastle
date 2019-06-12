@@ -1,7 +1,7 @@
 .PHONY: build test-build test-in-container push exec-test clean
 
-IMAGE_NAME = docker.io/usercont/packit-generator
-TEST_IMAGE_NAME = docker.io/usercont/packit-generator-test
+IMAGE_NAME = docker.io/usercont/sandcastle
+TEST_IMAGE_NAME = docker.io/usercont/sandcastle-tests
 TEST_TARGET = ./tests
 
 test-image-build: build
@@ -9,7 +9,7 @@ test-image-build: build
 
 test-in-container: test-build
 	docker run --rm \
-	        --name=packit-generator-test \
+	        --name=sandcastle-test \
 			$(TEST_IMAGE_NAME) \
 			make exec-test
 

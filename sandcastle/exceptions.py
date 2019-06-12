@@ -21,15 +21,15 @@
 # SOFTWARE.
 
 
-class SandboxException(Exception):
-    """ There was an issue during execution. """
+class SandcastleException(Exception):
+    """ Something went wrong. """
 
 
-class GeneratorDeployException(SandboxException):
-    pass
+class SandcastleExecutionError(SandcastleException):
+    """ There was an issue during sandbox execution. """
 
 
-class SandboxCommandFailed(SandboxException):
+class SandcastleCommandFailed(SandcastleException):
     """ The command executed in sandbox failed. """
 
     def __init__(self, output: str, reason: str, rc: int):
