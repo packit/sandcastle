@@ -55,22 +55,32 @@ from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import SandcastleCommandFailed, SandcastleExecutionError
-from sandcastle.utils import get_timestamp_now
+from sandcastle.utils import get_timestamp_now, clean_string
 
 logger = logging.getLogger(__name__)
 
 
 class VolumeSpec:
     """
-    Dataclass which defines volume configuration for the sandbox pod
+    Define volume configuration for the sandbox pod.
+    Either volume_name or Persistent Volume Claim are required.
     """
 
-    # name of the volume to use
-    name: str
-    # path within the sandbox where the volume is meant to be mounted
-    path: str
-    # use and existing PersistentVolumeClaim
-    pvc: str = ""
+    def __init__(
+        self, path: str, volume_name: str = "", pvc: str = "", pvc_from_env: str = ""
+    ):
+        """
+        :param path: path within the sandbox where the volume is meant to be mounted
+        :param volume_name: name of the volume to use
+        :param pvc: use and existing PersistentVolumeClaim
+        :param pvc_from_env: pick up pvc name from an env var;
+               priority: env var > pvc kwarg
+        """
+        self.name: str = volume_name
+        self.path: str = path
+        self.pvc: str = pvc
+        if pvc_from_env:
+            self.pvc = os.getenv(pvc_from_env)
 
 
 class Sandcastle(object):
@@ -100,9 +110,7 @@ class Sandcastle(object):
         self.k8s_namespace_name = k8s_namespace_name
 
         # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?
-        self.cleaned_name = (
-            image_reference.replace("/", "-").replace(":", "-").replace(".", "-")
-        )
+        self.cleaned_name = clean_string(image_reference)
         if pod_name:
             self.pod_name = pod_name
         else:
@@ -120,20 +128,8 @@ class Sandcastle(object):
             "name": self.pod_name,
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
-            # "volumeMounts": [
-            #     {"mountPath": self.volume_dir, "name": "packit-sandcastle"}
-            # ],
         }
-        spec = {
-            "containers": [container],
-            "restartPolicy": "Never",
-            # "volumes": [
-            #     {
-            #         "name": "packit-sandcastle",
-            #         "persistentVolumeClaim": {"claimName": "claim.packit"},
-            #     }
-            # ],
-        }
+        spec = {"containers": [container], "restartPolicy": "Never"}
         pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -149,14 +145,15 @@ class Sandcastle(object):
         if self.volume_mounts:
             volume_mounts: List[Dict] = []
             container["volumeMounts"] = volume_mounts
-            for vol in self.volume_mounts:
-                volume_mounts.append({"mountPath": vol.path, "name": vol.name})
             volumes: List[Dict] = []
             spec["volumes"] = volumes
             for vol in self.volume_mounts:
+                # local name b/w vol definition and container def
+                local_name = vol.name or clean_string(vol.pvc)
+                volume_mounts.append({"mountPath": vol.path, "name": local_name})
                 if vol.pvc:
                     di = {
-                        "name": vol.name,
+                        "name": local_name,
                         "persistentVolumeClaim": {"claimName": vol.pvc},
                     }
                 elif vol.name:
@@ -231,6 +228,7 @@ class Sandcastle(object):
     def create_pod(self, pod_manifest: Dict) -> Dict:
         """
         Create pod in a namespace
+
         :return: response from the API server
         """
         return self.api.create_namespaced_pod(
@@ -261,7 +259,7 @@ class Sandcastle(object):
 
     def deploy_pod(self, command: Optional[List] = None):
         """
-        Deploy pod into openshift. If it exists already, remove it.
+        Deploy a pod and babysit it. If it exists already, remove it.
         """
         logger.info("Deploying pod %s", self.pod_name)
         if self.is_pod_already_deployed():

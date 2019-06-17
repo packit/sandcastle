@@ -29,3 +29,32 @@ These things will happen:
 * The library actively waits for the pod to finish.
 * If the pod terminates with a return code greater than 0, an exception is raised.
 * Output of the command is return from the `.run()` method.
+
+
+### Sharing data between sandbox and current pod
+
+This library allows you to share volumes between the pod it is running in and between sandbox.
+
+There is a dedicated class and an interface to access this functionality:
+* `VolumeSpec` class
+* `volume_mounts` kwarg of Sandcastle constructor
+
+An example is worth of thousand words:
+```python
+from pathlib import Path
+from sandcastle import Sandcastle, VolumeSpec
+
+# the expectation is that volume assigned to PVC set
+# via env var SANDCASTLE_PVC is mounted in current pod at /path
+vs = VolumeSpec(path="/path", pvc_from_env="SANDCASTLE_PVC")
+
+s = Sandcastle(
+    image_reference="docker.io/this-is-my/image:latest",
+    k8s_namespace_name="myproject",
+    volume_mounts=[vs]
+)
+s.run()
+s.exec(command=["bash", "-c", "ls -lha /path"])    # will be empty
+s.exec(command=["bash", "-c", "mkdir /path/dir"])  # will create a dir
+assert Path("/path/dir").is_dir()                  # should pass
+```

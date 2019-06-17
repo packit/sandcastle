@@ -21,6 +21,7 @@
 # SOFTWARE.
 import time
 from pathlib import Path
+from typing import Optional
 
 import pytest
 import urllib3
@@ -29,7 +30,7 @@ from kubernetes.client import V1DeleteOptions
 from kubernetes.client.rest import ApiException
 
 from sandcastle.api import Sandcastle
-from sandcastle.utils import run_command
+from sandcastle.utils import run_command, get_timestamp_now, clean_string
 
 NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
@@ -48,36 +49,62 @@ def init_openshift_deployer():
     return Sandcastle(image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME)
 
 
-def run_test_within_pod(test_path: str):
-    """ run selected test from within an openshift pod """
+# TODO: refactor into a class
+def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
+    """
+    run selected test from within an openshift pod
+
+    :param test_path: relative path to the test
+    :param with_pv_at: path to PV within the pod
+    """
     config.load_kube_config()
     configuration = client.Configuration()
     assert configuration.api_key
     api = client.CoreV1Api(client.ApiClient(configuration))
+
+    container = {
+        "image": TEST_IMAGE_NAME,
+        "name": POD_NAME,
+        "tty": True,  # corols
+        "command": [
+            "bash",
+            "-c",
+            "ls -lha "
+            "&& id "
+            "&& pytest-3 --collect-only"
+            f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
+        ],
+        "imagePullPolicy": "Never",
+    }
+
+    spec = {"containers": [container], "restartPolicy": "Never"}
+
     pod_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {"name": POD_NAME},
-        "spec": {
-            "containers": [
-                {
-                    "image": TEST_IMAGE_NAME,
-                    "name": POD_NAME,
-                    "tty": True,  # corols
-                    "command": [
-                        "bash",
-                        "-c",
-                        "ls -lha "
-                        "&& id "
-                        "&& pytest-3 --collect-only"
-                        f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
-                    ],
-                    "imagePullPolicy": "Never",
-                }
-            ],
-            "restartPolicy": "Never",
-        },
+        "spec": spec,
     }
+    if with_pv_at:
+        cleaned_test_name = clean_string(test_path)
+        ts = get_timestamp_now()
+        volume_name = f"{cleaned_test_name}-{ts}-vol"[-63:]
+        claim_name = f"{cleaned_test_name}-{ts}-pvc"[-63:]
+        container["env"] = [{"name": "SANDCASTLE_PVC", "value": claim_name}]
+        pvc_dict = {
+            "kind": "PersistentVolumeClaim",
+            "spec": {
+                "accessModes": ["ReadWriteMany"],
+                "resources": {"requests": {"storage": "1Gi"}},
+            },
+            "apiVersion": "v1",
+            "metadata": {"name": claim_name},
+        }
+        api.create_namespaced_persistent_volume_claim(NAMESPACE, pvc_dict)
+        container["volumeMounts"] = [{"mountPath": with_pv_at, "name": volume_name}]
+        spec["volumes"] = [
+            {"name": volume_name, "persistentVolumeClaim": {"claimName": claim_name}}
+        ]
     try:
         api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
     except ApiException as ex:
@@ -114,6 +141,10 @@ def run_test_within_pod(test_path: str):
             api.read_namespaced_pod_log(name=POD_NAME, namespace=NAMESPACE, follow=True)
         )
         api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
+        if with_pv_at:
+            api.delete_namespaced_persistent_volume_claim(
+                claim_name, NAMESPACE, V1DeleteOptions()
+            )
 
 
 def build_now():
