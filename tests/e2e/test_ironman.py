@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from sandcastle import Sandcastle, MappedDir
+from sandcastle import Sandcastle, VolumeSpec
 from sandcastle.exceptions import SandcastleCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
@@ -70,44 +70,6 @@ def test_exec_failure():
         assert "ExitCode" in ex.value.reason
         assert "NonZeroExitCode" in ex.value.reason
         assert ex.value.rc == 2
-    finally:
-        o.delete_pod()
-
-
-def test_local_path_e2e_inside_w_exec(tmpdir):
-    m_dir = MappedDir()
-    m_dir.local_dir = str(tmpdir.mkdir("stark"))
-    m_dir.path = "/tmp/stark"
-
-    p = Path(m_dir.local_dir)
-    p.joinpath("qwe").write_text("Hello, Tony!")
-
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
-    )
-    o.run()
-    try:
-        out = o.exec(command=["ls", "/tmp/stark/qwe"])
-        assert "qwe" in out
-    finally:
-        o.delete_pod()
-
-
-def test_file_got_changed(tmpdir):
-    m_dir = MappedDir()
-    m_dir.local_dir = str(tmpdir.mkdir("stark"))
-    m_dir.path = "/tmp/stark"
-
-    p = Path(m_dir.local_dir).joinpath("qwe")
-    p.write_text("Hello, Tony!")
-
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
-    )
-    o.run()
-    try:
-        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>/tmp/stark/qwe"])
-        assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
     finally:
         o.delete_pod()
 

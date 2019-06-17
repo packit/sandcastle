@@ -19,7 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import datetime
 import logging
 import os
 import shlex
@@ -102,3 +102,7 @@ def set_logging(
             formatter = GeneratorFormatter(None, date_format)
             handler.setFormatter(formatter)
             logger.addHandler(handler)
+
+
+def get_timestamp_now() -> str:
+    return datetime.datetime.now().strftime("%Y%M%d-%H%M%S%f")

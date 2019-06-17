@@ -41,3 +41,9 @@ class SandcastleCommandFailed(SandcastleException):
         self.output: str = output
         self.reason: str = reason
         self.rc: int = rc
+
+    def __repr__(self):
+        return f"SandcastleCommandFailed(reason={self.reason}, rc={self.rc})\n{self.output}"
+
+    def __str__(self):
+        return f"Command failed (rc={self.rc}, reason={self.reason})\n{self.output}"

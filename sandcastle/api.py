@@ -28,15 +28,20 @@
 Our team have met to discuss volumes and sharing data b/w containers & pods.
 We came up with these solutions:
 
-* `oc cp` - copy data using the `cp` command: very simple
+* claim - utilize persistent volume claim feature of k8s: let pods claim volumes
+  and then attach the claimed volume to sandbox pod
+
+* `oc cp` - copy data using the `cp` command: very simple (alternatively,
+  run rsync server in the sandbox) -- this is problematic because oc-cp
+  is implemented using tar and you need to take care of source and destination
+  paths - if they exist, tar complains; there is also a problem that you
+  can't use workingDir in pod, because the path with the data likely
+  does not exist yet
 
 * controller pod - dynamically create and deploy pods
   with volumes - very flexible, pretty complex
-
-* claim - utilize persistent volume claim feature of k8s: let pods claim volumes
 """
 
-import datetime
 import json
 import logging
 import os
@@ -50,7 +55,7 @@ from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import SandcastleCommandFailed, SandcastleExecutionError
-from sandcastle.utils import run_command
+from sandcastle.utils import get_timestamp_now
 
 logger = logging.getLogger(__name__)
 
@@ -68,17 +73,6 @@ class VolumeSpec:
     pvc: str = ""
 
 
-class MappedDir:
-    """
-    Copy local directory to the pod using `oc cp`
-    """
-
-    # path within the sandbox where the directory should be copied
-    path: str
-    # copy this local directory to sandbox (using `oc cp`)
-    local_dir: str = ""
-
-
 class Sandcastle(object):
     def __init__(
         self,
@@ -88,7 +82,6 @@ class Sandcastle(object):
         pod_name: Optional[str] = None,
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
-        mapped_dirs: Optional[List[MappedDir]] = None,
     ):
         """
         :param image_reference: the pod will use this image
@@ -97,8 +90,6 @@ class Sandcastle(object):
         :param pod_name: name the pod like this, if not specified, generate something long and ugly
         :param service_account_name: run the pod using this service account
         :param volume_mounts: set these volume mounts in the sandbox
-        :param mapped_dirs, a list of mappings between a local dir which should be copied
-                            to the sandbox, and then copied back once all the works is done
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
@@ -113,12 +104,10 @@ class Sandcastle(object):
         if pod_name:
             self.pod_name = pod_name
         else:
-            timestamp = datetime.datetime.now().strftime("%Y%M%d-%H%M%S%f")
-            self.pod_name = f"{self.cleaned_name}-{timestamp}"
+            self.pod_name = f"{self.cleaned_name}-{get_timestamp_now()}"
 
         self.api: client.CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
-        self.mapped_dirs: List[MappedDir] = mapped_dirs or []
 
     def create_pod_manifest(self, command: Optional[List] = None) -> dict:
         env_image_vars = self.build_env_image_vars(self.env_vars)
@@ -257,25 +246,6 @@ class Sandcastle(object):
                 raise SandcastleExecutionError(f"Something's wrong with the pod': {e}")
             return False
 
-    def copy_path_to_pod(self, map: MappedDir):
-        """ copy local path inside the pod """
-        # Copy /tmp/foo local file to /tmp/bar
-        # in a remote pod in namespace <some-namespace>:
-        #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
-        target = f"{self.k8s_namespace_name}/{self.pod_name}:{map.path}"
-        logger.info(f"copy {map.local_dir} -> {target}")
-        # if you're interested: the way openshift does this is that creates a tarball locally
-        # and streams it via exec into the container to a pod process
-        run_command(["oc", "cp", map.local_dir, target])
-
-    def copy_path_from_pod(self, map: MappedDir):
-        """ copy remote path content locally """
-        # Copy /tmp/foo from a remote pod to /tmp/bar locally
-        #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
-        target = f"{self.k8s_namespace_name}/{self.pod_name}:{map.path}"
-        logger.info(f"copy {target} -> {map.local_dir}")
-        run_command(["oc", "cp", target, map.local_dir])
-
     @staticmethod
     def get_rc_from_v1pod(resp: V1Pod) -> int:
         try:
@@ -287,7 +257,6 @@ class Sandcastle(object):
     def deploy_pod(self, command: Optional[List] = None):
         """
         Deploy pod into openshift. If it exists already, remove it.
-        Once it starts, sync mapped dirs inside. If the command is set, wait for it to finish.
         """
         logger.info("Deploying pod %s", self.pod_name)
         if self.is_pod_already_deployed():
@@ -333,13 +302,6 @@ class Sandcastle(object):
                 rc=self.get_rc_from_v1pod(resp),
             )
 
-        if self.mapped_dirs and command:
-            raise RuntimeError(
-                "Since you set your own command, we cannot sync the local dir"
-                " inside because there is a race condition between the pod start"
-                " and the copy process. Please use exec instead."
-            )
-
         if command:
             # wait for the pod to finish since the command is set
             while True:
@@ -357,8 +319,6 @@ class Sandcastle(object):
                     )
                 if resp.status.phase == "Succeeded":
                     logger.info("All Containers in the pod have finished successfully.")
-                    for m_dir in self.mapped_dirs:
-                        self.copy_path_to_pod(m_dir)
                     break
                 # TODO: can we use watch instead?
                 time.sleep(1)
@@ -381,32 +341,29 @@ class Sandcastle(object):
         logger.info("Sandbox pod is deployed.")
         return self.get_logs()
 
-    def exec(self, command: List[str]) -> str:
-        """
-        exec a command in a running pod; if any mapped dirs are set,
-        sync the dirs before and after the execution
-
-        :param command: command to run
-        :returns logs
-        """
-        # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
-        for m_dir in self.mapped_dirs:
-            self.copy_path_to_pod(m_dir)
-        # FIXME: we're unable to get RC of the exec
-        ws_client: WSClient = stream(
+    def _do_exec(self, command: List[str], preload_content=True):
+        return stream(
             self.api.connect_get_namespaced_pod_exec,
             self.pod_name,
             self.k8s_namespace_name,
-            # async_req=True,
             command=command,
             stdin=False,
             stderr=True,
             stdout=True,
             tty=False,
-            _preload_content=False,  # <<< we need a client object
+            _preload_content=preload_content,  # <<< we need a client object
         )
 
+    def exec(self, command: List[str]) -> str:
+        """
+        exec a command in a running pod
+
+        :param command: command to run
+        :returns logs
+        """
+        # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
+        ws_client: WSClient = self._do_exec(command, preload_content=False)
         ws_client.run_forever(timeout=60)
         errors = ws_client.read_channel(ERROR_CHANNEL)
         # read_all would consume ERR_CHANNEL, so read_all needs to be last
@@ -438,6 +395,4 @@ class Sandcastle(object):
                 )
 
         logger.debug("exec response = %r" % response)
-        for m_dir in self.mapped_dirs:
-            self.copy_path_from_pod(m_dir)
         return response
