@@ -80,6 +80,7 @@ class Sandcastle(object):
         k8s_namespace_name: str,
         env_vars: Optional[Dict] = None,
         pod_name: Optional[str] = None,
+        working_dir: Optional[str] = None,
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
     ):
@@ -88,6 +89,7 @@ class Sandcastle(object):
         :param k8s_namespace_name: name of the namespace to deploy into
         :param env_vars: additional environment variables to set in the pod
         :param pod_name: name the pod like this, if not specified, generate something long and ugly
+        :param working_dir: path within the pod where we run commands by default
         :param service_account_name: run the pod using this service account
         :param volume_mounts: set these volume mounts in the sandbox
         """
@@ -106,6 +108,7 @@ class Sandcastle(object):
         else:
             self.pod_name = f"{self.cleaned_name}-{get_timestamp_now()}"
 
+        self.working_dir = working_dir
         self.api: client.CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
 
@@ -137,6 +140,8 @@ class Sandcastle(object):
             "metadata": {"name": self.pod_name},
             "spec": spec,
         }
+        if self.working_dir:
+            container["workingDir"] = self.working_dir
         if command:
             container["command"] = command
         if self.service_account_name:
