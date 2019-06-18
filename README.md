@@ -58,3 +58,21 @@ s.exec(command=["bash", "-c", "ls -lha /path"])    # will be empty
 s.exec(command=["bash", "-c", "mkdir /path/dir"])  # will create a dir
 assert Path("/path/dir").is_dir()                  # should pass
 ```
+
+
+## Developing sandcastle
+
+In order to develop this project (and run tests), there are several requirements which need to be met.
+
+1. An openshift cluster and be logged into it
+
+   Which means that running `oc status` should yield the cluster where you want to run the tests.
+
+   The e2e test `test_from_pod` builds current codebase and runs the other e2e
+   tests in a pod: to verify the E2E functionality. This expects that the
+   openshift cluster is deployed in your current environment, meaning that
+   openshift can access your local container images in your dockerd. Otherwise the
+   image needs to be pushed somewhere so openshift can access it.
+
+
+2. Docker binary and docker daemon running. This is implied from the first point.
