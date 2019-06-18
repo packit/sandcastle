@@ -46,7 +46,7 @@ import json
 import logging
 import os
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
@@ -344,7 +344,9 @@ class Sandcastle(object):
         logger.info("Sandbox pod is deployed.")
         return self.get_logs()
 
-    def _do_exec(self, command: List[str], preload_content=True):
+    def _do_exec(
+        self, command: List[str], preload_content=True
+    ) -> Union[WSClient, str]:
         return stream(
             self.api.connect_get_namespaced_pod_exec,
             self.pod_name,
