@@ -64,6 +64,8 @@ assert Path("/path/dir").is_dir()                  # should pass
 
 In order to develop this project (and run tests), there are several requirements which need to be met.
 
+0. Build container images using makefile target `make test-image-build`.
+
 1. An openshift cluster and be logged into it
 
    Which means that running `oc status` should yield the cluster where you want to run the tests.
