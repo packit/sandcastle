@@ -10,7 +10,7 @@ test-image-build: build
 	docker build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
 
 exec-test:
-	pytest $(TEST_TARGET)
+	pytest-3 $(TEST_TARGET)
 
 build:
 	docker build --tag ${IMAGE_NAME} .
