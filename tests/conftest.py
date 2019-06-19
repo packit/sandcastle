@@ -143,7 +143,7 @@ def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
         api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
         if with_pv_at:
             api.delete_namespaced_persistent_volume_claim(
-                claim_name, NAMESPACE, V1DeleteOptions()
+                name=claim_name, namespace=NAMESPACE, body=V1DeleteOptions()
             )
 
 
