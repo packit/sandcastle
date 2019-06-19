@@ -101,6 +101,25 @@ def test_dir_sync(tmpdir):
         o.delete_pod()
 
 
+@pytest.mark.skipif(
+    "KUBERNETES_SERVICE_HOST" not in os.environ,
+    reason="Not running in a pod, skipping.",
+)
+def test_pod_sa_not_in_sandbox(tmpdir):
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    sa_path = "/var/run/secrets/kubernetes.io/serviceaccount"
+    with pytest.raises(SandcastleCommandFailed) as e:
+        o.run(command=["ls", "-lha", sa_path])
+    try:
+        assert (
+            e.value.output.strip()
+            == f"ls: cannot access '{sa_path}': No such file or directory"
+        )
+        assert e.value.rc == 2
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.parametrize(
     "test_name,mount_path",
     (
@@ -108,6 +127,7 @@ def test_dir_sync(tmpdir):
         ("test_exec_failure", None),
         ("test_run_failure", None),
         ("test_dir_sync", "/asdqwe"),
+        ("test_pod_sa_not_in_sandbox", None),
     ),
 )
 def test_from_pod(test_name, mount_path):

@@ -129,7 +129,11 @@ class Sandcastle(object):
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
         }
-        spec = {"containers": [container], "restartPolicy": "Never"}
+        spec = {
+            "containers": [container],
+            "restartPolicy": "Never",
+            "automountServiceAccountToken": False,
+        }
         pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",

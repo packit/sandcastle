@@ -205,6 +205,7 @@ def test_manifest(init_openshift_deployer):
         "kind": "Pod",
         "metadata": {"name": od.pod_name},
         "spec": {
+            "automountServiceAccountToken": False,
             "containers": [
                 {
                     "image": od.image_reference,
