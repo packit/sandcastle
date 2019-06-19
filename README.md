@@ -64,11 +64,12 @@ assert Path("/path/dir").is_dir()                  # should pass
 
 In order to develop this project (and run tests), there are several requirements which need to be met.
 
-0. Build container images using makefile target `make test-image-build`.
+1. Build container images using makefile target `make test-image-build`.
 
-1. An openshift cluster and be logged into it
+2. An openshift cluster and be logged into it
 
-   Which means that running `oc status` should yield the cluster where you want to run the tests.
+   Which means that running `oc status` should yield the cluster where you want
+   to run the tests.
 
    The e2e test `test_from_pod` builds current codebase and runs the other e2e
    tests in a pod: to verify the E2E functionality. This expects that the
@@ -76,5 +77,13 @@ In order to develop this project (and run tests), there are several requirements
    openshift can access your local container images in your dockerd. Otherwise the
    image needs to be pushed somewhere so openshift can access it.
 
+3. In the default `oc cluster up` environment, the tests create sandbox pod
+   using the default service account which assigned to every pod. This SA
+   doesn't have permissions to create nor delete pods (so the sandboxing would
+   not work). With this command, the SA is allowed to change any objects in the
+   namespace:
+   ```
+   oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
+   ```
 
-2. Docker binary and docker daemon running. This is implied from the first point.
+4. Docker binary and docker daemon running. This is implied from the first point.

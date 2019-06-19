@@ -244,6 +244,14 @@ class Sandcastle(object):
             return True
         except ApiException as e:
             logger.debug(e)
+            if e.status == 403:
+                logger.error("we are not allowed to get info about the pod")
+                logger.info("exception = %r", e)
+                raise SandcastleExecutionError(
+                    "We are not allowed to get information about pods: "
+                    "please make sure that the identity you're using can "
+                    "access resources in the API server."
+                )
             if e.status != 404:
                 logger.error(f"Unknown error: {e!r}")
                 raise SandcastleExecutionError(f"Something's wrong with the pod': {e}")
