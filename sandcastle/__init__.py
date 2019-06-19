@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 
-from sandcastle.api import Sandcastle, MappedDir, VolumeSpec  # NOQA
+from sandcastle.api import Sandcastle, VolumeSpec  # NOQA
 from sandcastle.exceptions import (  # NOQA
     SandcastleException,
     SandcastleCommandFailed,

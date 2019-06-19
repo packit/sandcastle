@@ -19,7 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+import datetime
 import logging
 import os
 import shlex
@@ -102,3 +102,25 @@ def set_logging(
             formatter = GeneratorFormatter(None, date_format)
             handler.setFormatter(formatter)
             logger.addHandler(handler)
+
+
+def get_timestamp_now() -> str:
+    return datetime.datetime.now().strftime("%Y%M%d-%H%M%S%f")
+
+
+def clean_string(s: str) -> str:
+    """
+    a DNS-1123 subdomain must consist of lower case alphanumeric characters, '-' or '.',
+    and must start and end with an alphanumeric character (
+    e.g. 'example.com', regex used for validation is
+    '[a-z0-9]( [-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
+
+    'must be no more than 63 characters'
+    """
+    return (
+        s.replace("/", "-")
+        .replace(":", "-")
+        .replace("_", "-")
+        .replace(".", "-")
+        .replace("--", "-")[-63:]
+    )

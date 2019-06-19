@@ -19,11 +19,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import os
 from pathlib import Path
 
 import pytest
 
-from sandcastle import Sandcastle, MappedDir
+from sandcastle import Sandcastle, VolumeSpec
 from sandcastle.exceptions import SandcastleCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
@@ -74,56 +75,43 @@ def test_exec_failure():
         o.delete_pod()
 
 
-def test_local_path_e2e_inside_w_exec(tmpdir):
-    m_dir = MappedDir()
-    m_dir.local_dir = str(tmpdir.mkdir("stark"))
-    m_dir.path = "/tmp/stark"
-
-    p = Path(m_dir.local_dir)
-    p.joinpath("qwe").write_text("Hello, Tony!")
-
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
-    )
-    o.run()
-    try:
-        out = o.exec(command=["ls", "/tmp/stark/qwe"])
-        assert "qwe" in out
-    finally:
-        o.delete_pod()
-
-
-def test_file_got_changed(tmpdir):
-    m_dir = MappedDir()
-    m_dir.local_dir = str(tmpdir.mkdir("stark"))
-    m_dir.path = "/tmp/stark"
-
-    p = Path(m_dir.local_dir).joinpath("qwe")
-    p.write_text("Hello, Tony!")
+@pytest.mark.skipif(
+    "KUBERNETES_SERVICE_HOST" not in os.environ,
+    reason="Not running in a pod, skipping.",
+)
+def test_dir_sync(tmpdir):
+    p = Path("/asdqwe")
+    vs = VolumeSpec(path=str(p), pvc_from_env="SANDCASTLE_PVC")
 
     o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, volume_mounts=[vs]
     )
     o.run()
+    d = p.joinpath("dir")
+    d.mkdir()
+    d.joinpath("file").write_text("asd")
     try:
-        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>/tmp/stark/qwe"])
-        assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
+        o.exec(command=["bash", "-c", "ls -lha /asdqwe/dir/file"])
+        o.exec(command=["bash", "-c", "[[ 'asd' == $(cat /asdqwe/dir/file) ]]"])
+        o.exec(command=["bash", "-c", "mkdir /asdqwe/dir/d"])
+        o.exec(command=["bash", "-c", "touch /asdqwe/dir/f"])
+        assert Path("/asdqwe/dir/d").is_dir()
+        assert Path("/asdqwe/dir/f").is_file()
     finally:
         o.delete_pod()
 
 
 @pytest.mark.parametrize(
-    "test_name",
+    "test_name,mount_path",
     (
-        "test_basic_e2e_inside",
-        "test_exec_failure",
-        "test_run_failure",
-        "test_local_path_e2e_inside_w_exec",
-        "test_file_got_changed",
+        ("test_basic_e2e_inside", None),
+        ("test_exec_failure", None),
+        ("test_run_failure", None),
+        ("test_dir_sync", "/asdqwe"),
     ),
 )
-def test_from_pod(test_name):
+def test_from_pod(test_name, mount_path):
     """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
     build_now()
     path = f"tests/e2e/test_ironman.py::{test_name}"
-    run_test_within_pod(path)
+    run_test_within_pod(path, with_pv_at=mount_path)
