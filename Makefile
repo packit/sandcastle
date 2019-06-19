@@ -1,16 +1,14 @@
-.PHONY: check build test-image-build exec-test push clean
+.PHONY: check build test-image-build push clean
 
 IMAGE_NAME = docker.io/usercont/sandcastle
 TEST_IMAGE_NAME = docker.io/usercont/sandcastle-tests
 TEST_TARGET = ./tests
 
-check: exec-test
-
 test-image-build: build
 	docker build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
 
-exec-test:
-	pytest-3 $(TEST_TARGET)
+check:
+	pytest-3 -vv $(TEST_TARGET)
 
 build:
 	docker build --tag ${IMAGE_NAME} .
