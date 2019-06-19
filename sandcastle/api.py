@@ -54,7 +54,11 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
-from sandcastle.exceptions import SandcastleCommandFailed, SandcastleExecutionError
+from sandcastle.exceptions import (
+    SandcastleCommandFailed,
+    SandcastleExecutionError,
+    SandcastleTimeoutReached,
+)
 from sandcastle.utils import get_timestamp_now, clean_string
 
 logger = logging.getLogger(__name__)
@@ -129,7 +133,11 @@ class Sandcastle(object):
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
         }
-        spec = {"containers": [container], "restartPolicy": "Never"}
+        spec = {
+            "containers": [container],
+            "restartPolicy": "Never",
+            "automountServiceAccountToken": False,
+        }
         pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
@@ -201,7 +209,7 @@ class Sandcastle(object):
         client.Configuration.set_default(configuration)
         return client.CoreV1Api()
 
-    def get_response_from_pod(self) -> V1Pod:
+    def get_pod(self) -> V1Pod:
         """
         Read info from a pod in a namespace
         :return: JSON Dict
@@ -240,7 +248,7 @@ class Sandcastle(object):
         Check if the pod is already present.
         """
         try:
-            self.get_response_from_pod()
+            self.get_pod()
             return True
         except ApiException as e:
             logger.debug(e)
@@ -280,7 +288,7 @@ class Sandcastle(object):
         count = 0
         logger.debug("pod = %r" % self.pod_name)
         while True:
-            resp = self.get_response_from_pod()
+            resp = self.get_pod()
             # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
             if resp.status.phase != "Pending":
                 logger.info("pod is no longed pending - status: %s", resp.status.phase)
@@ -316,7 +324,7 @@ class Sandcastle(object):
         if command:
             # wait for the pod to finish since the command is set
             while True:
-                resp = self.get_response_from_pod()
+                resp = self.get_pod()
                 # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
                 if resp.status.phase == "Failed":
                     logger.info(
@@ -374,6 +382,12 @@ class Sandcastle(object):
         :param command: command to run
         :returns logs
         """
+        # we need to check first if the pod is running; otherwise we'd get a nasty 500
+        pod = self.get_pod()
+        if pod.status.phase != "Running":
+            raise SandcastleTimeoutReached(
+                "You have reached a timeout: the pod is no longer running."
+            )
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         ws_client: WSClient = self._do_exec(command, preload_content=False)

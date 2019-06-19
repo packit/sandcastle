@@ -165,7 +165,7 @@ def delete_pod():
 
 def test_is_pod_already_deployed(init_openshift_deployer):
     od = init_openshift_deployer
-    flexmock(od).should_receive("get_response_from_pod").and_raise(
+    flexmock(od).should_receive("get_pod").and_raise(
         ApiException(status=200, reason="POD already exists")
     )
     with pytest.raises(SandcastleExecutionError):
@@ -174,7 +174,7 @@ def test_is_pod_already_deployed(init_openshift_deployer):
 
 def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
     od = init_openshift_deployer
-    flexmock(od).should_receive("get_response_from_pod").and_return(pod_not_deployed)
+    flexmock(od).should_receive("get_pod").and_return(pod_not_deployed)
     assert od.is_pod_already_deployed()
 
 
@@ -205,6 +205,7 @@ def test_manifest(init_openshift_deployer):
         "kind": "Pod",
         "metadata": {"name": od.pod_name},
         "spec": {
+            "automountServiceAccountToken": False,
             "containers": [
                 {
                     "image": od.image_reference,

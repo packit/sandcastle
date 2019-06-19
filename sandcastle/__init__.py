@@ -24,6 +24,7 @@
 from sandcastle.api import Sandcastle, VolumeSpec  # NOQA
 from sandcastle.exceptions import (  # NOQA
     SandcastleException,
+    SandcastleTimeoutReached,
     SandcastleCommandFailed,
     SandcastleExecutionError,
 )
