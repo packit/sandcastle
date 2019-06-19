@@ -25,6 +25,10 @@ class SandcastleException(Exception):
     """ Something went wrong. """
 
 
+class SandcastleTimeoutReached(SandcastleException):
+    """ Timeout was reached while sandboxing """
+
+
 class SandcastleExecutionError(SandcastleException):
     """ There was an issue during sandbox execution. """
 

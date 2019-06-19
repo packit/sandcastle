@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from sandcastle import Sandcastle, VolumeSpec
+from sandcastle import Sandcastle, VolumeSpec, SandcastleExecutionError
 from sandcastle.exceptions import SandcastleCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
@@ -120,6 +120,18 @@ def test_pod_sa_not_in_sandbox(tmpdir):
         o.delete_pod()
 
 
+def test_exec_succ_pod(tmpdir):
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    # we mimic here that the pod has finished and we are still running commands inside
+    o.run(command=["true"])
+    try:
+        with pytest.raises(SandcastleExecutionError) as e:
+            o.exec(command=["true"])
+        assert "timeout" in str(e.value)
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.parametrize(
     "test_name,mount_path",
     (
@@ -128,6 +140,7 @@ def test_pod_sa_not_in_sandbox(tmpdir):
         ("test_run_failure", None),
         ("test_dir_sync", "/asdqwe"),
         ("test_pod_sa_not_in_sandbox", None),
+        ("test_exec_succ_pod", None),
     ),
 )
 def test_from_pod(test_name, mount_path):
