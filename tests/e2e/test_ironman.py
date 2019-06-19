@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from sandcastle import Sandcastle, VolumeSpec, SandcastleExecutionError
+from sandcastle import Sandcastle, VolumeSpec, SandcastleTimeoutReached
 from sandcastle.exceptions import SandcastleCommandFailed
 from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
 
@@ -125,7 +125,7 @@ def test_exec_succ_pod(tmpdir):
     # we mimic here that the pod has finished and we are still running commands inside
     o.run(command=["true"])
     try:
-        with pytest.raises(SandcastleExecutionError) as e:
+        with pytest.raises(SandcastleTimeoutReached) as e:
             o.exec(command=["true"])
         assert "timeout" in str(e.value)
     finally:
