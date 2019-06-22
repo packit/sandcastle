@@ -59,6 +59,42 @@ s.exec(command=["bash", "-c", "mkdir /path/dir"])  # will create a dir
 assert Path("/path/dir").is_dir()                  # should pass
 ```
 
+#### Sharing data by copying them
+
+Sandcastle is able to run the sandbox pod in a different namespace. This
+improves security since it's trivial to lock networking of this project down -
+the pod won't be able to access OpenShift API server nor any of your services
+deployed in the cluster. For more info, check out [egress
+rules](https://blog.openshift.com/accessing-external-services-using-egress-router/)
+and [network
+policy](https://docs.openshift.com/container-platform/3.6/admin_guide/managing_networking.html#admin-guide-networking-networkpolicy).
+
+When you set up this sandbox namespace, please make sure that service account
+of namespace your app is deployed in can manage pods in the sandbox namespace.
+This command should help:
+```bash
+$ oc adm -n ${SANDBOX_NAMESPACE} policy add-role-to-user edit system:serviceaccount:${APP_NAMESPACE}:default
+```
+
+Real code:
+
+```python
+m_dir = MappedDir(
+    local_dir,             # share this dir
+    sandbox_mountpoint,    # make it available here
+    with_interim_pvc=True  # the data will be placed in a volume
+)
+
+o = Sandcastle(
+    image_reference=container_image,
+    k8s_namespace_name=namespace,      # can be a different namespace
+    mapped_dirs=[m_dir],
+    working_dir=sandbox_mountpoint,
+)
+o.run()
+# happy execing
+o.exec(command=["ls", "-lha", f"{sandbox_mountpoint}/"])
+```
 
 ## Developing sandcastle
 
@@ -78,7 +114,7 @@ In order to develop this project (and run tests), there are several requirements
    image needs to be pushed somewhere so openshift can access it.
 
 3. In the default `oc cluster up` environment, the tests create sandbox pod
-   using the default service account which assigned to every pod. This SA
+   using the default service account which is assigned to every pod. This SA
    doesn't have permissions to create nor delete pods (so the sandboxing would
    not work). With this command, the SA is allowed to change any objects in the
    namespace:
