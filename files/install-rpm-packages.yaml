@@ -6,10 +6,12 @@
     dnf:
       name:
       - make
-      - git
+      - git-core
       - packit
       - rpmdevtools
       state: present
+    tags:
+    - basic-image
   - name: Install all RPM packages needed to hack on sandcastle.
     dnf:
       name:
@@ -32,3 +34,5 @@
     pip:
       executable: /usr/bin/pip3
       requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
+    tags:
+    - with-sandcastle-deps
