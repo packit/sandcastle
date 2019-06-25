@@ -128,7 +128,7 @@ class Sandcastle(object):
         :param service_account_name: run the pod using this service account
         :param volume_mounts: set these volume mounts in the sandbox
         :param mapped_dirs, a list of mappings between a local dir which should be copied
-               to the sandbox, and then copied back once all the works is done
+               to the sandbox, and then copied back once all the work is done
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
