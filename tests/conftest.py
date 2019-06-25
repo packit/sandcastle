@@ -21,7 +21,7 @@
 # SOFTWARE.
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any, Dict
 
 import pytest
 import urllib3
@@ -36,8 +36,8 @@ NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
 SANDBOX_IMAGE = "docker.io/usercont/sandcastle"
 TEST_IMAGE_NAME = "docker.io/usercont/sandcastle-tests"
-POD_NAME = "test-orchestrator"
 NAMESPACE = "myproject"
+SANDCASTLE_MOUNTPOINT = "/sandcastle"
 
 
 # exterminate!
@@ -49,40 +49,85 @@ def init_openshift_deployer():
     return Sandcastle(image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME)
 
 
+@pytest.fixture(scope="session")
+def build_now():
+    """ build a container image with current sandcastle checkout """
+    project_root = Path(__file__).parent.parent
+    run_command(
+        [
+            "docker",
+            "build",
+            "-t",
+            TEST_IMAGE_NAME,
+            "-f",
+            "Dockerfile.tests",
+            str(project_root),
+        ]
+    )
+
+
 # TODO: refactor into a class
-def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
+def run_test_within_pod(
+    test_path: str, with_pv_at: Optional[str] = None, new_namespace: bool = False
+):
     """
     run selected test from within an openshift pod
 
     :param test_path: relative path to the test
     :param with_pv_at: path to PV within the pod
+    :param new_namespace: create new namespace and pass it via env var
     """
     config.load_kube_config()
     configuration = client.Configuration()
     assert configuration.api_key
     api = client.CoreV1Api(client.ApiClient(configuration))
 
-    container = {
+    pod_name = f"test-orchestrator-{get_timestamp_now()}"
+
+    cont_cmd = [
+        "bash",
+        "-c",
+        "ls -lha "
+        "&& id "
+        "&& pytest-3 --collect-only"
+        f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
+    ]
+
+    container: Dict[str, Any] = {
         "image": TEST_IMAGE_NAME,
-        "name": POD_NAME,
+        "name": pod_name,
         "tty": True,  # corols
-        "command": [
-            "bash",
-            "-c",
-            "ls -lha "
-            "&& id "
-            "&& pytest-3 --collect-only"
-            f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
-        ],
+        "command": cont_cmd,
         "imagePullPolicy": "Never",
+        "env": [],
     }
+
+    test_namespace = None
+    if new_namespace:
+        test_namespace = f"sandcastle-tests-{get_timestamp_now()}"
+        c = ["oc", "new-project", test_namespace]
+        run_command(c)
+        c = [
+            "oc",
+            "adm",
+            "-n",
+            test_namespace,
+            "policy",
+            "add-role-to-user",
+            "edit",
+            f"system:serviceaccount:{NAMESPACE}:default",
+        ]
+        run_command(c)
+        container["env"] += [
+            {"name": "SANDCASTLE_TESTS_NAMESPACE", "value": test_namespace}
+        ]
 
     spec = {"containers": [container], "restartPolicy": "Never"}
 
     pod_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {"name": POD_NAME},
+        "metadata": {"name": pod_name},
         "spec": spec,
     }
     if with_pv_at:
@@ -106,7 +151,7 @@ def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
             {"name": volume_name, "persistentVolumeClaim": {"claimName": claim_name}}
         ]
     try:
-        api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
+        api.delete_namespaced_pod(pod_name, NAMESPACE, body=V1DeleteOptions())
     except ApiException as ex:
         if ex.status != 404:
             raise
@@ -117,19 +162,19 @@ def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
         while True:
             if counter < 0:
                 raise RuntimeError("Pod did not start on time.")
-            info = api.read_namespaced_pod(POD_NAME, NAMESPACE)
+            info = api.read_namespaced_pod(pod_name, NAMESPACE)
             if info.status.phase == "Running":
                 break
             time.sleep(2.0)
             counter -= 1
         print(
-            api.read_namespaced_pod_log(name=POD_NAME, namespace=NAMESPACE, follow=True)
+            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
         )
         counter = 15
         while True:
             if counter < 0:
                 raise RuntimeError("Pod did not finish on time.")
-            info = api.read_namespaced_pod(POD_NAME, NAMESPACE)
+            info = api.read_namespaced_pod(pod_name, NAMESPACE)
             if info.status.phase == "Succeeded":
                 break
             if info.status.phase == "Failed":
@@ -138,26 +183,12 @@ def run_test_within_pod(test_path: str, with_pv_at: Optional[str] = None):
             counter -= 1
     finally:
         print(
-            api.read_namespaced_pod_log(name=POD_NAME, namespace=NAMESPACE, follow=True)
+            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
         )
-        api.delete_namespaced_pod(POD_NAME, NAMESPACE, body=V1DeleteOptions())
+        api.delete_namespaced_pod(pod_name, NAMESPACE, body=V1DeleteOptions())
+        if new_namespace:
+            run_command(["oc", "delete", "project", test_namespace])
         if with_pv_at:
             api.delete_namespaced_persistent_volume_claim(
                 name=claim_name, namespace=NAMESPACE, body=V1DeleteOptions()
             )
-
-
-def build_now():
-    """ build a container image with sandcastle """
-    project_root = Path(__file__).parent.parent
-    run_command(
-        [
-            "docker",
-            "build",
-            "-t",
-            TEST_IMAGE_NAME,
-            "-f",
-            "Dockerfile.tests",
-            str(project_root),
-        ]
-    )

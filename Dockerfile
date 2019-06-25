@@ -11,7 +11,7 @@ ENV LANG=en_US.UTF-8 \
 
 WORKDIR ${WORKDIR}
 
-RUN dnf install -y ansible
+RUN dnf install -y ansible && dnf clean all
 
 COPY files/install-rpm-packages.yaml /src/files/install-rpm-packages.yaml
 COPY tests/requirements.txt /src/tests/requirements.txt
@@ -19,7 +19,7 @@ COPY tests/requirements.txt /src/tests/requirements.txt
 # assert
 RUN ls tests/requirements.txt
 
-RUN ansible-playbook -vv -c local -i localhost, files/install-rpm-packages.yaml \
+RUN ansible-playbook -vv -c local -t basic-image -i localhost, files/install-rpm-packages.yaml \
     && dnf clean all
 
 COPY files/container-cmd.sh /src/

@@ -19,14 +19,21 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import json
 import os
 from pathlib import Path
 
 import pytest
 
-from sandcastle import Sandcastle, VolumeSpec, SandcastleTimeoutReached
+from sandcastle import Sandcastle, VolumeSpec, SandcastleTimeoutReached, MappedDir
 from sandcastle.exceptions import SandcastleCommandFailed
-from tests.conftest import SANDBOX_IMAGE, NAMESPACE, build_now, run_test_within_pod
+from sandcastle.utils import run_command, get_timestamp_now
+from tests.conftest import (
+    SANDBOX_IMAGE,
+    NAMESPACE,
+    run_test_within_pod,
+    SANDCASTLE_MOUNTPOINT,
+)
 
 
 def test_basic_e2e_inside():
@@ -132,19 +139,131 @@ def test_exec_succ_pod(tmpdir):
         o.delete_pod()
 
 
+def test_local_path_e2e_inside_w_exec(tmpdir):
+    p = Path(tmpdir)
+    m_dir = MappedDir(str(p), "/sandcastle", with_interim_pvc=True)
+
+    p.joinpath("stark").mkdir()
+    p.joinpath("qwe").write_text("Hello, Tony!")
+
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE,
+        k8s_namespace_name=NAMESPACE,
+        mapped_dirs=[m_dir],
+        working_dir="/sandcastle",
+    )
+    o.run()
+    try:
+        out = o.exec(command=["ls", "/sandcastle/qwe"])
+        assert "qwe" in out
+        o.exec(command=["touch", "/sandcastle/stark/asd"])
+        assert p.joinpath("stark/asd").is_file()
+        o.exec(command=["touch", "./zxc"])
+        assert p.joinpath("zxc").is_file()
+    finally:
+        o.delete_pod()
+
+
+def test_file_got_changed(tmpdir):
+    m_dir = MappedDir(str(tmpdir.mkdir("stark")), "/sandcastle", with_interim_pvc=True)
+
+    p = Path(m_dir.local_dir).joinpath("qwe")
+    p.write_text("Hello, Tony!")
+
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
+    )
+    o.run()
+    try:
+        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>/sandcastle/qwe"])
+        assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
+    finally:
+        o.delete_pod()
+
+
+def test_md_e2e(tmpdir):
+    t = Path(tmpdir)
+    m_dir = MappedDir(str(t), "/sandcastle", with_interim_pvc=True)
+
+    run_command(
+        ["git", "clone", "https://github.com/packit-service/hello-world.git", t]
+    )
+
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE,
+        k8s_namespace_name=NAMESPACE,
+        mapped_dirs=[m_dir],
+        working_dir="/sandcastle",
+    )
+    o.run()
+    try:
+        o.exec(command=["packit", "srpm"])
+        assert list(t.glob("*.src.rpm"))
+    finally:
+        o.delete_pod()
+
+
+def test_md_new_namespace(tmpdir):
+    t = Path(tmpdir)
+    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+
+    d = t.joinpath("dir")
+    d.mkdir()
+    d.joinpath("file").write_text("asd")
+
+    # running within openshift
+    namespace = os.getenv("SANDCASTLE_TESTS_NAMESPACE")
+    if not namespace:
+        # running on a host - you can't create new projects from inside a pod
+        namespace = f"sandcastle-tests-{get_timestamp_now()}"
+        c = ["oc", "new-project", namespace]
+        run_command(c)
+
+    try:
+        o = Sandcastle(
+            image_reference=SANDBOX_IMAGE,
+            k8s_namespace_name=namespace,
+            mapped_dirs=[m_dir],
+            working_dir=SANDCASTLE_MOUNTPOINT,
+        )
+        o.run()
+        try:
+            o.exec(command=["ls", "-lha", f"{SANDCASTLE_MOUNTPOINT}/dir/file"])
+            assert d.joinpath("file").read_text() == "asd"
+            cmd = [
+                "bash",
+                "-c",
+                "curl -skL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
+            ]
+            out = o.exec(command=cmd)
+            j = json.loads(out)
+            # a small proof we are safe
+            assert j["reason"] == "Forbidden"
+        finally:
+            o.delete_pod()
+    finally:
+        if not os.getenv("SANDCASTLE_TESTS_NAMESPACE"):
+            run_command(["oc", "delete", "project", namespace])
+            run_command(["oc", "project", NAMESPACE])
+
+
 @pytest.mark.parametrize(
-    "test_name,mount_path",
+    "test_name,kwargs",
     (
         ("test_basic_e2e_inside", None),
         ("test_exec_failure", None),
         ("test_run_failure", None),
-        ("test_dir_sync", "/asdqwe"),
+        ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
         ("test_pod_sa_not_in_sandbox", None),
         ("test_exec_succ_pod", None),
+        ("test_local_path_e2e_inside_w_exec", None),
+        ("test_file_got_changed", None),
+        ("test_md_e2e", None),
+        ("test_md_new_namespace", {"new_namespace": True}),
     ),
 )
-def test_from_pod(test_name, mount_path):
+def test_from_pod(build_now, test_name, kwargs):
     """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
-    build_now()
     path = f"tests/e2e/test_ironman.py::{test_name}"
-    run_test_within_pod(path, with_pv_at=mount_path)
+    kwargs = kwargs or {}
+    run_test_within_pod(path, **kwargs)

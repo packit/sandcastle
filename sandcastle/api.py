@@ -46,6 +46,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 from kubernetes import config, client
@@ -59,9 +60,32 @@ from sandcastle.exceptions import (
     SandcastleExecutionError,
     SandcastleTimeoutReached,
 )
-from sandcastle.utils import get_timestamp_now, clean_string
+from sandcastle.kube import PVC
+from sandcastle.utils import (
+    get_timestamp_now,
+    clean_string,
+    run_command,
+    purge_dir_content,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class MappedDir:
+    """
+    Copy local directory to the pod using `oc cp`
+    """
+
+    def __init__(self, local_dir: str, path: str, with_interim_pvc: bool = True):
+        """
+        :param local_dir: path within the sandbox where the directory should be copied
+        :param path: copy this local directory to sandbox (using `oc cp`)
+        :param with_interim_pvc: create interim Persistent Volume Claim in the sandbox
+               where the data will be copied
+        """
+        self.path = Path(path)
+        self.local_dir = Path(local_dir)
+        self.with_interim_pvc = with_interim_pvc
 
 
 class VolumeSpec:
@@ -97,6 +121,7 @@ class Sandcastle(object):
         working_dir: Optional[str] = None,
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
+        mapped_dirs: Optional[List[MappedDir]] = None,
     ):
         """
         :param image_reference: the pod will use this image
@@ -106,6 +131,8 @@ class Sandcastle(object):
         :param working_dir: path within the pod where we run commands by default
         :param service_account_name: run the pod using this service account
         :param volume_mounts: set these volume mounts in the sandbox
+        :param mapped_dirs, a list of mappings between a local dir which should be copied
+               to the sandbox, and then copied back once all the work is done
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
@@ -115,15 +142,15 @@ class Sandcastle(object):
 
         # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?
         self.cleaned_name = clean_string(image_reference)
-        if pod_name:
-            self.pod_name = pod_name
-        else:
-            self.pod_name = f"{self.cleaned_name}-{get_timestamp_now()}"
+        self.pod_name = pod_name or f"{self.cleaned_name}-{get_timestamp_now()}"
 
         self.working_dir = working_dir
         self.api: client.CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
+        self.mapped_dirs: List[MappedDir] = mapped_dirs or []
+        self.pvc: Optional[PVC] = None
 
+    # TODO: refactor into a pod class
     def create_pod_manifest(self, command: Optional[List] = None) -> dict:
         env_image_vars = self.build_env_image_vars(self.env_vars)
         # this is broken down for sake of mypy
@@ -150,6 +177,21 @@ class Sandcastle(object):
             container["command"] = command
         if self.service_account_name:
             spec["serviceAccountName"] = self.service_account_name
+
+        for md in self.mapped_dirs:
+            if md.with_interim_pvc:
+                self.pvc = PVC(path=md.path)
+                self.api.create_namespaced_persistent_volume_claim(
+                    namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
+                )
+                self.volume_mounts.append(
+                    VolumeSpec(
+                        path=self.pvc.path,
+                        volume_name=self.pvc.volume_name,
+                        pvc=self.pvc.claim_name,
+                    )
+                )
+
         if self.volume_mounts:
             volume_mounts: List[Dict] = []
             container["volumeMounts"] = volume_mounts
@@ -228,6 +270,12 @@ class Sandcastle(object):
             self.api.delete_namespaced_pod(
                 self.pod_name, self.k8s_namespace_name, body=V1DeleteOptions()
             )
+            if self.pvc:
+                self.api.delete_namespaced_persistent_volume_claim(
+                    self.pvc.claim_name,
+                    namespace=self.k8s_namespace_name,
+                    body=V1DeleteOptions(),
+                )
         except ApiException as e:
             logger.debug(e)
             if e.status != 404:
@@ -277,6 +325,13 @@ class Sandcastle(object):
         """
         Deploy a pod and babysit it. If it exists already, remove it.
         """
+        if self.mapped_dirs and command:
+            raise RuntimeError(
+                "Since you set your own command, we cannot sync the local dir"
+                " inside because there is a race condition between the pod start"
+                " and the copy process. Please use exec instead."
+            )
+
         logger.info("Deploying pod %s", self.pod_name)
         if self.is_pod_already_deployed():
             self.delete_pod()
@@ -388,6 +443,8 @@ class Sandcastle(object):
             raise SandcastleTimeoutReached(
                 "You have reached a timeout: the pod is no longer running."
             )
+        for m_dir in self.mapped_dirs:
+            self._copy_path_to_pod(m_dir)
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         ws_client: WSClient = self._do_exec(command, preload_content=False)
@@ -401,8 +458,12 @@ class Sandcastle(object):
             status = j.get("status", None)
             if status == "Success":
                 logger.info("exec command succeeded, yay!")
+                for m_dir in self.mapped_dirs:
+                    self._copy_path_from_pod(m_dir)
             elif status == "Failure":
                 logger.info("exec command failed")
+                for m_dir in self.mapped_dirs:
+                    self._copy_path_from_pod(m_dir)
                 # ('{"metadata":{},"status":"Failure","message":"command terminated with '
                 #  'non-zero exit code: Error executing in Docker Container: '
                 #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
@@ -417,9 +478,40 @@ class Sandcastle(object):
                 raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
             else:
                 logger.warning(
-                    "exec didn't yield the metadata we expect, mighty suspicous, %s",
+                    "exec didn't yield the metadata we expect, mighty suspicious, %s",
                     errors,
                 )
 
         logger.debug("exec response = %r" % response)
         return response
+
+    def _copy_path_to_pod(self, m_dir: MappedDir):
+        """ copy local path inside the pod """
+        # Copy /tmp/foo local file to /tmp/bar
+        # in a remote pod in namespace <some-namespace>:
+        #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
+        target = f"{self.k8s_namespace_name}/{self.pod_name}:{m_dir.path}"
+        logger.info(f"copy {m_dir.local_dir} -> {target}")
+        # if you're interested: the way openshift does this is that creates a tarball locally
+        # and streams it via exec into the container to a pod process
+        for item in m_dir.local_dir.iterdir():
+            # we are doing this insanity because of two things:
+            #   1. tar creates a root dir in the tarball, so we would need to cd into it
+            #   2. this way we can set working_dir to m_dir.path in the pod
+            logger.debug(f"copy item {item} -> {target}")
+            run_command(["oc", "cp", item, target])
+
+    def _copy_path_from_pod(self, m_dir: MappedDir):
+        """ copy remote path content locally """
+        # Copy /tmp/foo from a remote pod to /tmp/bar locally
+        #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
+        target = f"{self.k8s_namespace_name}/{self.pod_name}:{m_dir.path}"
+
+        # temp_dir = Path(tempfile.mkdtemp())
+        # logger.info(f"copy {target} -> {temp_dir}")
+        # run_command(["oc", "cp", target, temp_dir])
+
+        purge_dir_content(m_dir.local_dir)
+
+        logger.info(f"copy {target} -> {m_dir.local_dir}")
+        run_command(["oc", "cp", target, m_dir.local_dir])
