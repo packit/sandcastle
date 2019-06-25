@@ -19,6 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import json
 import os
 from pathlib import Path
 
@@ -232,15 +233,12 @@ def test_md_new_namespace(tmpdir):
             cmd = [
                 "bash",
                 "-c",
-                "curl -vskL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
+                "curl -skL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
             ]
             out = o.exec(command=cmd)
+            j = json.loads(out)
             # a small proof we are safe
-            assert "forbidden" in out
-            assert "system:anonymous" in out
-            assert "/metrics" in out
-            assert "cannot get path " in out
-            assert "no RBAC policy matched" in out
+            assert j["reason"] == "Forbidden"
         finally:
             o.delete_pod()
     finally:
