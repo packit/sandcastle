@@ -38,10 +38,7 @@ class PVC:
     ):
         self.path = str(path)
         base = f"sandcastle-{clean_string(self.path)}-{get_timestamp_now()}"
-        if not claim_name:
-            self.claim_name = f"{base}-pvc"
-        else:
-            self.claim_name = claim_name
+        self.claim_name = claim_name or f"{base}-pvc"
         self.volume_name = f"{base}-vol"
         self.access_modes = access_modes or ["ReadWriteOnce"]
         self.storage_size = storage_size
