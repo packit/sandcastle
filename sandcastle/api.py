@@ -495,6 +495,9 @@ class Sandcastle(object):
         # if you're interested: the way openshift does this is that creates a tarball locally
         # and streams it via exec into the container to a pod process
         for item in m_dir.local_dir.iterdir():
+            # tar: lost+found: Cannot utime: Operation not permitted
+            if item.name == "lost+found":
+                continue
             # we are doing this insanity because of two things:
             #   1. tar creates a root dir in the tarball, so we would need to cd into it
             #   2. this way we can set working_dir to m_dir.path in the pod

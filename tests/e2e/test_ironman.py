@@ -247,6 +247,34 @@ def test_md_new_namespace(tmpdir):
             run_command(["oc", "project", NAMESPACE])
 
 
+# To verify this:
+# tar: lost+found: Cannot utime: Operation not permitted
+# tar: lost+found: Cannot change mode to rwxr-sr-x: Operation not permitted
+# tar: Exiting with failure status due to previous errors
+def test_lost_found_is_ignored(tmpdir):
+    t = Path(tmpdir)
+    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT)
+
+    lf = t.joinpath("lost+found")
+    lf.mkdir()
+    t.joinpath("file").write_text("asd")
+
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE,
+        k8s_namespace_name=NAMESPACE,
+        mapped_dirs=[m_dir],
+        working_dir=SANDCASTLE_MOUNTPOINT,
+    )
+    o.run()
+    try:
+        o.exec(command=["ls", "-lha", f"{SANDCASTLE_MOUNTPOINT}"])
+        with pytest.raises(SandcastleCommandFailed) as ex:
+            o.exec(command=["ls", f"{SANDCASTLE_MOUNTPOINT}/lost+found"])
+        assert "No such file or directory" in str(ex.value)
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.parametrize(
     "test_name,kwargs",
     (
@@ -259,6 +287,7 @@ def test_md_new_namespace(tmpdir):
         ("test_local_path_e2e_inside_w_exec", None),
         ("test_file_got_changed", None),
         ("test_md_e2e", None),
+        ("test_lost_found_is_ignored", None),
         ("test_md_new_namespace", {"new_namespace": True}),
     ),
 )
