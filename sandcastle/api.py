@@ -350,12 +350,12 @@ class Sandcastle(object):
                 break
             time.sleep(1)
             count += 1
-            if count > 30:
+            if count > 600:
                 logger.error(
                     "The pod did not start on time, " "status = %r" % resp.status
                 )
                 raise RuntimeError(
-                    "The pod did not start in 30 seconds: something's wrong."
+                    "The pod did not start in 600 seconds: something's wrong."
                 )
 
         if resp.status.phase == "Failed":
