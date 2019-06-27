@@ -26,6 +26,7 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Tuple, List
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +139,43 @@ def purge_dir_content(di: Path):
             item.unlink()
         else:
             shutil.rmtree(item)
+
+
+class Chmodo:
+    """ util class to set mode of files on a path, recursively """
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    def get_files_and_mode(self) -> List[Tuple[Path, str]]:
+        """ recursively enumerate files and dirs on the provided path """
+        work = list(self.path.iterdir())
+        result: List[Tuple[Path, str]] = []
+
+        while work:
+            current_path = work.pop()
+            if current_path.is_dir():
+                work += list(current_path.iterdir())
+            result.append((current_path, oct(current_path.stat().st_mode)))
+        return result
+
+    def get_shell_script(self) -> str:
+        """ get shell script which sets the mode """
+        script = ""
+        for p in self.get_files_and_mode():
+            script += f"chmod {p[1][-3:]} {p[0].relative_to(self.path)}\n"
+        return script
+
+    def apply_chmods(self, modes_paths: str):
+        """
+        process output of `"find . -exec stat -c '%a %n' {} \\;` and apply modes to local files
+
+        :param modes_paths: output of the find command
+        """
+        items = modes_paths.rstrip("\n").split("\n")
+        for i in items:
+            mode, path = i.split(" ", 1)
+            if path == ".":
+                # we don't have perms to change the volume mountpoint, only the contents
+                continue
+            self.path.joinpath(path).chmod(int(mode, base=8))

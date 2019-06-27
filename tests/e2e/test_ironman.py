@@ -139,24 +139,21 @@ def test_exec_succ_pod(tmpdir):
         o.delete_pod()
 
 
-def test_local_path_e2e_inside_w_exec(tmpdir):
+def test_md_multiple_exec(tmpdir):
     p = Path(tmpdir)
-    m_dir = MappedDir(str(p), "/sandcastle", with_interim_pvc=True)
+    m_dir = MappedDir(str(p), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     p.joinpath("stark").mkdir()
     p.joinpath("qwe").write_text("Hello, Tony!")
 
     o = Sandcastle(
-        image_reference=SANDBOX_IMAGE,
-        k8s_namespace_name=NAMESPACE,
-        mapped_dirs=[m_dir],
-        working_dir="/sandcastle",
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
     )
     o.run()
     try:
-        out = o.exec(command=["ls", "/sandcastle/qwe"])
+        out = o.exec(command=["ls", "./qwe"])
         assert "qwe" in out
-        o.exec(command=["touch", "/sandcastle/stark/asd"])
+        o.exec(command=["touch", "./stark/asd"])
         assert p.joinpath("stark/asd").is_file()
         o.exec(command=["touch", "./zxc"])
         assert p.joinpath("zxc").is_file()
@@ -165,35 +162,37 @@ def test_local_path_e2e_inside_w_exec(tmpdir):
 
 
 def test_file_got_changed(tmpdir):
-    m_dir = MappedDir(str(tmpdir.mkdir("stark")), "/sandcastle", with_interim_pvc=True)
+    m_dir = MappedDir(str(tmpdir), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     p = Path(m_dir.local_dir).joinpath("qwe")
     p.write_text("Hello, Tony!")
 
     o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dirs=[m_dir]
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
     )
     o.run()
     try:
-        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>/sandcastle/qwe"])
+        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>./qwe"])
         assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
     finally:
         o.delete_pod()
 
 
-def test_md_e2e(tmpdir):
+@pytest.mark.parametrize(
+    "git_url",
+    (
+        "https://github.com/packit-service/hello-world.git",
+        "https://github.com/packit-service/packit.git",
+    ),
+)
+def test_md_e2e(tmpdir, git_url):
     t = Path(tmpdir)
-    m_dir = MappedDir(str(t), "/sandcastle", with_interim_pvc=True)
+    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
-    run_command(
-        ["git", "clone", "https://github.com/packit-service/hello-world.git", t]
-    )
+    run_command(["git", "clone", git_url, t])
 
     o = Sandcastle(
-        image_reference=SANDBOX_IMAGE,
-        k8s_namespace_name=NAMESPACE,
-        mapped_dirs=[m_dir],
-        working_dir="/sandcastle",
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
     )
     o.run()
     try:
@@ -223,12 +222,11 @@ def test_md_new_namespace(tmpdir):
         o = Sandcastle(
             image_reference=SANDBOX_IMAGE,
             k8s_namespace_name=namespace,
-            mapped_dirs=[m_dir],
-            working_dir=SANDCASTLE_MOUNTPOINT,
+            mapped_dir=m_dir,
         )
         o.run()
         try:
-            o.exec(command=["ls", "-lha", f"{SANDCASTLE_MOUNTPOINT}/dir/file"])
+            o.exec(command=["ls", "-lha", f"./dir/file"])
             assert d.joinpath("file").read_text() == "asd"
             cmd = [
                 "bash",
@@ -260,17 +258,35 @@ def test_lost_found_is_ignored(tmpdir):
     t.joinpath("file").write_text("asd")
 
     o = Sandcastle(
-        image_reference=SANDBOX_IMAGE,
-        k8s_namespace_name=NAMESPACE,
-        mapped_dirs=[m_dir],
-        working_dir=SANDCASTLE_MOUNTPOINT,
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
     )
     o.run()
     try:
-        o.exec(command=["ls", "-lha", f"{SANDCASTLE_MOUNTPOINT}"])
+        o.exec(command=["ls", "-lha", "./"])
         with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["ls", f"{SANDCASTLE_MOUNTPOINT}/lost+found"])
+            o.exec(command=["ls", f"./lost+found"])
         assert "No such file or directory" in str(ex.value)
+    finally:
+        o.delete_pod()
+
+
+def test_changing_mode(tmpdir):
+    t = Path(tmpdir)
+    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT)
+
+    fi = t.joinpath("file")
+    fi.write_text("asd")
+    fi.chmod(mode=0o777)
+
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
+    )
+    o.run()
+    try:
+        out = o.exec(command=["stat", "-c", "%a", "./file"]).strip()
+        assert "777" == out
+        stat_oct = oct(fi.stat().st_mode)[-3:]
+        assert stat_oct == "777"
     finally:
         o.delete_pod()
 
@@ -284,11 +300,12 @@ def test_lost_found_is_ignored(tmpdir):
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
         ("test_pod_sa_not_in_sandbox", None),
         ("test_exec_succ_pod", None),
-        ("test_local_path_e2e_inside_w_exec", None),
+        ("test_md_multiple_exec", None),
         ("test_file_got_changed", None),
         ("test_md_e2e", None),
         ("test_lost_found_is_ignored", None),
         ("test_md_new_namespace", {"new_namespace": True}),
+        ("test_changing_mode", None),
     ),
 )
 def test_from_pod(build_now, test_name, kwargs):
