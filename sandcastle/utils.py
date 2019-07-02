@@ -30,12 +30,13 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def run_command(cmd, error_message=None, cwd=None, fail=True, output=False):
+def run_command(cmd, cwd=None, output=False):
     if not isinstance(cmd, list):
         cmd = shlex.split(cmd)
 
     cwd = cwd or os.getcwd()
-    error_message = error_message or cmd[0]
+
+    logger.debug("%s", cmd)
 
     shell = subprocess.run(
         cmd,
@@ -46,13 +47,12 @@ def run_command(cmd, error_message=None, cwd=None, fail=True, output=False):
         universal_newlines=True,
     )
 
-    logger.debug(f"{shell.args}\n{shell.stdout}")
+    if shell.stdout:
+        logger.info("%s", shell.stdout)
 
     if shell.returncode != 0:
-        logger.error(f"{error_message}\n{shell.stderr}")
-        if fail:
-            raise Exception(f"{shell.args!r} failed with {error_message!r}")
-        success = False
+        logger.error(f"{shell.stderr}")
+        raise Exception(f"{shell.args!r} failed with {shell.stderr!r}")
     else:
         success = True
 
