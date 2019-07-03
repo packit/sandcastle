@@ -46,11 +46,10 @@ import json
 import logging
 import os
 import shlex
-import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
@@ -438,7 +437,9 @@ class Sandcastle(object):
             _preload_content=preload_content,  # <<< we need a client object
         )
 
-    def _prepare_mdir_exec(self, command: List[str], target_dir: Optional[Path] = None):
+    def _prepare_mdir_exec(
+        self, command: List[str], target_dir: Optional[Path] = None
+    ) -> Tuple[str, str]:
         """
         wrap a command to exec in the sandbox in a script
 
@@ -446,9 +447,7 @@ class Sandcastle(object):
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
         :return: (path to the sync'd dir within sandbox, path to the script within sandbox)
         """
-        cmd_str = ""
-        for c in command:
-            cmd_str += f"{shlex.quote(c)} "
+        cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
         # this is where the content of mapped_dir will be
@@ -458,16 +457,13 @@ class Sandcastle(object):
 
         # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         script_template = "#!/bin/bash\n" f"cd {unique_dir}\n" f"exec {cmd_str}\n"
-        tmpdir = tempfile.mkdtemp()
-        try:
+        with tempfile.TemporaryDirectory() as tmpdir:
             t = Path(tmpdir)
             local_script_path = t.joinpath(script_name)
             local_script_path.write_text(script_template)
             self._do_exec(["mkdir", "-p", unique_dir]).strip()
             self._copy_path_to_pod(local_script_path, root_target_dir)
             return unique_dir, target_script_path
-        finally:
-            shutil.rmtree(tmpdir)
 
     def exec(self, command: List[str]) -> str:
         """
@@ -489,7 +485,7 @@ class Sandcastle(object):
                 command, target_dir=self.mapped_dir.path
             )
             command = ["bash", target_script_path]
-            self._copy_path_to_pod(self.mapped_dir.local_dir, unique_dir)
+            self._copy_path_to_pod(self.mapped_dir.local_dir, Path(unique_dir))
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         # FIXME: refactor this junk into a dedicated function, ideally to _do_exec
@@ -538,8 +534,7 @@ class Sandcastle(object):
         :param local_path: path to a local file or a dir
         :param pod_dir: Directory within the pod where the content of local_path is extracted
         """
-        tmp_tarball_dir = tempfile.mkdtemp()
-        try:
+        with tempfile.TemporaryDirectory() as tmp_tarball_dir:
             tmp_tarball_path = os.path.join(tmp_tarball_dir, "t.tar.gz")
             cmd = ["tar", "--preserve-permissions", "-czf", tmp_tarball_path]
 
@@ -548,6 +543,9 @@ class Sandcastle(object):
                 items = [local_path]
                 working_dir = local_path.parent
             else:
+                # this has to be list, because mypy:
+                #   Incompatible types in assignment (expression has type
+                #     "Generator[Path, None, None]", variable has type "List[Path]")
                 items = list(local_path.iterdir())
             # tar: lost+found: Cannot utime: Operation not permitted
             # list comprehension no likey mypy
@@ -578,8 +576,6 @@ class Sandcastle(object):
                 self._do_exec(unpack_cmd)
             finally:
                 self._do_exec(["rm", "-rf", remote_tmp_dir])
-        finally:
-            shutil.rmtree(tmp_tarball_dir)
 
     def _copy_path_from_pod(self, local_dir: Path, pod_dir: str):
         """
@@ -612,7 +608,7 @@ class Sandcastle(object):
                 logger.info(f"copy {target} -> {tmp_tarball_path}")
                 run_command(["oc", "cp", target, tmp_tarball_path])
 
-                purge_dir_content(Path(local_dir))
+                purge_dir_content(local_dir)
 
                 unpack_cmd = [
                     "tar",
@@ -620,7 +616,7 @@ class Sandcastle(object):
                     "-xzf",
                     tmp_tarball_path,
                     "-C",
-                    local_dir,
+                    str(local_dir),
                 ]
                 run_command(unpack_cmd)
             finally:
