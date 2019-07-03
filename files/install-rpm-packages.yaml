@@ -9,6 +9,11 @@
       - git-core
       - packit
       - rpmdevtools
+      - automake
+      - autoconf
+      - tito
+      - cmake
+      - meson
       state: present
     tags:
     - basic-image
