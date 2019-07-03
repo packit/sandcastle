@@ -86,9 +86,9 @@ class MappedDir:
         :param with_interim_pvc: create interim Persistent Volume Claim in the sandbox
                where the data will be copied
         """
-        self.path = Path(path)
-        self.local_dir = Path(local_dir)
-        self.with_interim_pvc = with_interim_pvc
+        self.path: Path = Path(path)
+        self.local_dir: Path = Path(local_dir)
+        self.with_interim_pvc: bool = with_interim_pvc
 
 
 class VolumeSpec:
@@ -108,7 +108,7 @@ class VolumeSpec:
                priority: env var > pvc kwarg
         """
         self.name: str = volume_name
-        self.path: str = path
+        self.path: Path = Path(path)
         self.pvc: str = pvc
         if pvc_from_env:
             self.pvc = os.getenv(pvc_from_env)
@@ -207,7 +207,7 @@ class Sandcastle(object):
             for vol in self.volume_mounts:
                 # local name b/w vol definition and container def
                 local_name = vol.name or clean_string(vol.pvc)
-                volume_mounts.append({"mountPath": vol.path, "name": local_name})
+                volume_mounts.append({"mountPath": str(vol.path), "name": local_name})
                 if vol.pvc:
                     di = {
                         "name": local_name,
@@ -439,7 +439,7 @@ class Sandcastle(object):
 
     def _prepare_mdir_exec(
         self, command: List[str], target_dir: Optional[Path] = None
-    ) -> Tuple[str, str]:
+    ) -> Tuple[Path, Path]:
         """
         wrap a command to exec in the sandbox in a script
 
@@ -451,9 +451,9 @@ class Sandcastle(object):
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
         # this is where the content of mapped_dir will be
-        unique_dir = os.path.join(root_target_dir, self.pod_name)
+        unique_dir = root_target_dir.joinpath(self.pod_name)
         script_name = "script.sh"
-        target_script_path = os.path.join(root_target_dir, script_name)
+        target_script_path = root_target_dir.joinpath(script_name)
 
         # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         script_template = "#!/bin/bash\n" f"cd {unique_dir}\n" f"exec {cmd_str}\n"
@@ -461,7 +461,7 @@ class Sandcastle(object):
             t = Path(tmpdir)
             local_script_path = t.joinpath(script_name)
             local_script_path.write_text(script_template)
-            self._do_exec(["mkdir", "-p", unique_dir]).strip()
+            self._do_exec(["mkdir", "-p", str(unique_dir)]).strip()
             self._copy_path_to_pod(local_script_path, root_target_dir)
             return unique_dir, target_script_path
 
@@ -482,9 +482,9 @@ class Sandcastle(object):
         unique_dir = None
         if self.mapped_dir:
             unique_dir, target_script_path = self._prepare_mdir_exec(
-                command, target_dir=self.mapped_dir.path
+                command, target_dir=Path(self.mapped_dir.path)
             )
-            command = ["bash", target_script_path]
+            command = ["bash", str(target_script_path)]
             self._copy_path_to_pod(self.mapped_dir.local_dir, Path(unique_dir))
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
@@ -534,8 +534,9 @@ class Sandcastle(object):
         :param local_path: path to a local file or a dir
         :param pod_dir: Directory within the pod where the content of local_path is extracted
         """
-        with tempfile.TemporaryDirectory() as tmp_tarball_dir:
-            tmp_tarball_path = os.path.join(tmp_tarball_dir, "t.tar.gz")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_tarball_dir = Path(tmpdir)
+            tmp_tarball_path = tmp_tarball_dir.joinpath("t.tar.gz")
             cmd = ["tar", "--preserve-permissions", "-czf", tmp_tarball_path]
 
             working_dir = local_path
@@ -554,9 +555,9 @@ class Sandcastle(object):
                     continue
                 cmd.append(str(x.relative_to(working_dir)))
             run_command(cmd, cwd=working_dir)
-            remote_tmp_dir = self._do_exec(["mktemp", "-d"]).strip()
+            remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
             try:
-                remote_tar_path = os.path.join(remote_tmp_dir, "t.tar.gz")
+                remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
                 # Copy /tmp/foo local file to /tmp/bar
                 # in a remote pod in namespace <some-namespace>:
                 #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
@@ -569,31 +570,31 @@ class Sandcastle(object):
                     "tar",
                     "--preserve-permissions",
                     "-xzf",
-                    remote_tar_path,
+                    str(remote_tar_path),
                     "-C",
                     str(pod_dir),
                 ]
                 self._do_exec(unpack_cmd)
             finally:
-                self._do_exec(["rm", "-rf", remote_tmp_dir])
+                self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
 
-    def _copy_path_from_pod(self, local_dir: Path, pod_dir: str):
+    def _copy_path_from_pod(self, local_dir: Path, pod_dir: Path):
         """
         copy content of a dir from pod locally
 
         :param local_dir: path to the local dir
         :param pod_dir: path within the pod
         """
-        remote_tmp_dir = self._do_exec(["mktemp", "-d"]).strip()
+        remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
         try:
-            remote_tar_path = os.path.join(remote_tmp_dir, "t.tar.gz")
+            remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
             pack_cmd = [
                 "tar",
                 "--preserve-permissions",
                 "-czf",
-                remote_tar_path,
+                str(remote_tar_path),
                 "-C",
-                pod_dir,
+                str(pod_dir),
                 ".",
             ]
             self._do_exec(pack_cmd)
@@ -622,9 +623,9 @@ class Sandcastle(object):
             finally:
                 os.unlink(tmp_tarball_path)
         finally:
-            self._do_exec(["rm", "-rf", remote_tmp_dir])
+            self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
 
-    def _copy_mdir_from_pod(self, unique_dir: str):
+    def _copy_mdir_from_pod(self, unique_dir: Path):
         """ process mapped_dir after we are done execing """
         if self.mapped_dir:
             logger.debug("mapped_dir is set, let's sync the dir back and fix modes")
