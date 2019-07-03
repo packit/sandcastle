@@ -490,39 +490,45 @@ class Sandcastle(object):
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         # FIXME: refactor this junk into a dedicated function, ideally to _do_exec
         ws_client: WSClient = self._do_exec(command, preload_content=False)
-        ws_client.run_forever(timeout=60)
-        errors = ws_client.read_channel(ERROR_CHANNEL)
-        logger.debug("%s", errors)
-        # read_all would consume ERR_CHANNEL, so read_all needs to be last
-        response = ws_client.read_all()
-        if errors:
-            # errors = '{"metadata":{},"status":"Success"}'
-            j = json.loads(errors)
-            status = j.get("status", None)
-            if status == "Success":
-                logger.info("exec command succeeded, yay!")
-                self._copy_mdir_from_pod(unique_dir)
-            elif status == "Failure":
-                logger.info("exec command failed")
-                self._copy_mdir_from_pod(unique_dir)
+        try:
+            # https://github.com/packit-service/sandcastle/issues/23
+            # even with a >0 number or ==0, select tends to block
+            # setting it 0 could make things better
+            ws_client.run_forever(timeout=0)
+            errors = ws_client.read_channel(ERROR_CHANNEL)
+            logger.debug("%s", errors)
+            # read_all would consume ERR_CHANNEL, so read_all needs to be last
+            response = ws_client.read_all()
+            if errors:
+                # errors = '{"metadata":{},"status":"Success"}'
+                j = json.loads(errors)
+                status = j.get("status", None)
+                if status == "Success":
+                    logger.info("exec command succeeded, yay!")
+                    self._copy_mdir_from_pod(unique_dir)
+                elif status == "Failure":
+                    logger.info("exec command failed")
+                    self._copy_mdir_from_pod(unique_dir)
 
-                # ('{"metadata":{},"status":"Failure","message":"command terminated with '
-                #  'non-zero exit code: Error executing in Docker Container: '
-                #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
-                causes = j.get("details", {}).get("causes", [])
-                rc = 999
-                for c in causes:
-                    if c.get("reason", None) == "ExitCode":
-                        try:
-                            rc = int(c.get("message", None))
-                        except ValueError:
-                            rc = 999
-                raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
-            else:
-                logger.warning(
-                    "exec didn't yield the metadata we expect, mighty suspicious, %s",
-                    errors,
-                )
+                    # ('{"metadata":{},"status":"Failure","message":"command terminated with '
+                    #  'non-zero exit code: Error executing in Docker Container: '
+                    #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
+                    causes = j.get("details", {}).get("causes", [])
+                    rc = 999
+                    for c in causes:
+                        if c.get("reason", None) == "ExitCode":
+                            try:
+                                rc = int(c.get("message", None))
+                            except ValueError:
+                                rc = 999
+                    raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
+                else:
+                    logger.warning(
+                        "exec didn't yield the metadata we expect, mighty suspicious, %s",
+                        errors,
+                    )
+        finally:
+            ws_client.close()
 
         logger.debug("exec response = %r" % response)
         return response

@@ -24,7 +24,6 @@
       - python3-devel
       - python3-ipdb  # for easy debugging
       - python3-pip
-      - python3-kubernetes
       - python3-setuptools
       - python3-setuptools_scm
       - python3-setuptools_scm_git_archive
@@ -33,6 +32,27 @@
       - python3-pytest  # tests
       - python3-flexmock
       state: present
+    tags:
+    - with-sandcastle-deps
+  - name: Install python-kube
+    block:
+    - name: tmpdir
+      tempfile:
+        state: directory
+      register: tmpdir
+    - name: clone to tmpdir
+      git:
+        repo: https://github.com/TomasTomecek/kubernetes-python.git
+        recursive: true
+        dest: '{{ tmpdir.path }}'
+    - name: install
+      pip:
+        executable: /usr/bin/pip3
+        name: 'file://{{ tmpdir.path }}'
+    - name: clean tmpdir
+      file:
+        path: '{{ tmpdir.path }}'
+        state: absent
     tags:
     - with-sandcastle-deps
   - name:
