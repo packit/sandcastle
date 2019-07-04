@@ -17,7 +17,7 @@
     pip:
       name:
         - packitos
-        - kubernetes
+        - kubernetes==8.0.0
         - pytest
         - flexmock
       executable: pip3
