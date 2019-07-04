@@ -88,7 +88,7 @@ m_dir = MappedDir(
 o = Sandcastle(
     image_reference=container_image,
     k8s_namespace_name=namespace,      # can be a different namespace
-    mapped_dirs=[m_dir],
+    mapped_dir=m_dir,
     working_dir=sandbox_mountpoint,
 )
 o.run()

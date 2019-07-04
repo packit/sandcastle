@@ -45,9 +45,11 @@ We came up with these solutions:
 import json
 import logging
 import os
+import shlex
+import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
@@ -59,6 +61,7 @@ from sandcastle.exceptions import (
     SandcastleCommandFailed,
     SandcastleExecutionError,
     SandcastleTimeoutReached,
+    SandcastleException,
 )
 from sandcastle.kube import PVC
 from sandcastle.utils import (
@@ -83,9 +86,9 @@ class MappedDir:
         :param with_interim_pvc: create interim Persistent Volume Claim in the sandbox
                where the data will be copied
         """
-        self.path = Path(path)
-        self.local_dir = Path(local_dir)
-        self.with_interim_pvc = with_interim_pvc
+        self.path: Path = Path(path)
+        self.local_dir: Path = Path(local_dir)
+        self.with_interim_pvc: bool = with_interim_pvc
 
 
 class VolumeSpec:
@@ -105,7 +108,7 @@ class VolumeSpec:
                priority: env var > pvc kwarg
         """
         self.name: str = volume_name
-        self.path: str = path
+        self.path: Path = Path(path)
         self.pvc: str = pvc
         if pvc_from_env:
             self.pvc = os.getenv(pvc_from_env)
@@ -121,7 +124,7 @@ class Sandcastle(object):
         working_dir: Optional[str] = None,
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
-        mapped_dirs: Optional[List[MappedDir]] = None,
+        mapped_dir: Optional[MappedDir] = None,
     ):
         """
         :param image_reference: the pod will use this image
@@ -131,8 +134,10 @@ class Sandcastle(object):
         :param working_dir: path within the pod where we run commands by default
         :param service_account_name: run the pod using this service account
         :param volume_mounts: set these volume mounts in the sandbox
-        :param mapped_dirs, a list of mappings between a local dir which should be copied
+        :param mapped_dir, a mapping between a local dir which should be copied
                to the sandbox, and then copied back once all the work is done
+               when this is set, working_dir args is being ignored and sandcastle invokes
+               all exec commands in the working dir of the mapped dir
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
@@ -145,9 +150,12 @@ class Sandcastle(object):
         self.pod_name = pod_name or f"{self.cleaned_name}-{get_timestamp_now()}"
 
         self.working_dir = working_dir
+        if working_dir and mapped_dir:
+            logger.warning("Ignoring warning_dir becase mapped_dir is set.")
+            self.working_dir = None
         self.api: client.CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
-        self.mapped_dirs: List[MappedDir] = mapped_dirs or []
+        self.mapped_dir: MappedDir = mapped_dir
         self.pvc: Optional[PVC] = None
 
     # TODO: refactor into a pod class
@@ -178,19 +186,18 @@ class Sandcastle(object):
         if self.service_account_name:
             spec["serviceAccountName"] = self.service_account_name
 
-        for md in self.mapped_dirs:
-            if md.with_interim_pvc:
-                self.pvc = PVC(path=md.path)
-                self.api.create_namespaced_persistent_volume_claim(
-                    namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
+        if self.mapped_dir and self.mapped_dir.with_interim_pvc:
+            self.pvc = PVC(path=self.mapped_dir.path)
+            self.api.create_namespaced_persistent_volume_claim(
+                namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
+            )
+            self.volume_mounts.append(
+                VolumeSpec(
+                    path=self.pvc.path,
+                    volume_name=self.pvc.volume_name,
+                    pvc=self.pvc.claim_name,
                 )
-                self.volume_mounts.append(
-                    VolumeSpec(
-                        path=self.pvc.path,
-                        volume_name=self.pvc.volume_name,
-                        pvc=self.pvc.claim_name,
-                    )
-                )
+            )
 
         if self.volume_mounts:
             volume_mounts: List[Dict] = []
@@ -200,7 +207,7 @@ class Sandcastle(object):
             for vol in self.volume_mounts:
                 # local name b/w vol definition and container def
                 local_name = vol.name or clean_string(vol.pvc)
-                volume_mounts.append({"mountPath": vol.path, "name": local_name})
+                volume_mounts.append({"mountPath": str(vol.path), "name": local_name})
                 if vol.pvc:
                     di = {
                         "name": local_name,
@@ -325,8 +332,8 @@ class Sandcastle(object):
         """
         Deploy a pod and babysit it. If it exists already, remove it.
         """
-        if self.mapped_dirs and command:
-            raise RuntimeError(
+        if self.mapped_dir and command:
+            raise SandcastleException(
                 "Since you set your own command, we cannot sync the local dir"
                 " inside because there is a race condition between the pod start"
                 " and the copy process. Please use exec instead."
@@ -430,6 +437,34 @@ class Sandcastle(object):
             _preload_content=preload_content,  # <<< we need a client object
         )
 
+    def _prepare_mdir_exec(
+        self, command: List[str], target_dir: Optional[Path] = None
+    ) -> Tuple[Path, Path]:
+        """
+        wrap a command to exec in the sandbox in a script
+
+        :param command: command to wrap
+        :param target_dir: a dir in the sandbox where the script is supposed to be copied
+        :return: (path to the sync'd dir within sandbox, path to the script within sandbox)
+        """
+        cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
+
+        root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
+        # this is where the content of mapped_dir will be
+        unique_dir = root_target_dir.joinpath(self.pod_name)
+        script_name = "script.sh"
+        target_script_path = root_target_dir.joinpath(script_name)
+
+        # git checkout - oc cp does not preserve the file mode and makes the repo dirty
+        script_template = "#!/bin/bash\n" f"cd {unique_dir}\n" f"exec {cmd_str}\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            t = Path(tmpdir)
+            local_script_path = t.joinpath(script_name)
+            local_script_path.write_text(script_template)
+            self._do_exec(["mkdir", "-p", str(unique_dir)]).strip()
+            self._copy_path_to_pod(local_script_path, root_target_dir)
+            return unique_dir, target_script_path
+
     def exec(self, command: List[str]) -> str:
         """
         exec a command in a running pod
@@ -443,78 +478,163 @@ class Sandcastle(object):
             raise SandcastleTimeoutReached(
                 "You have reached a timeout: the pod is no longer running."
             )
-        for m_dir in self.mapped_dirs:
-            self._copy_path_to_pod(m_dir)
+        logger.info("command = %s", command)
+        unique_dir = None
+        if self.mapped_dir:
+            unique_dir, target_script_path = self._prepare_mdir_exec(
+                command, target_dir=Path(self.mapped_dir.path)
+            )
+            command = ["bash", str(target_script_path)]
+            self._copy_path_to_pod(self.mapped_dir.local_dir, Path(unique_dir))
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
+        # FIXME: refactor this junk into a dedicated function, ideally to _do_exec
         ws_client: WSClient = self._do_exec(command, preload_content=False)
-        ws_client.run_forever(timeout=60)
-        errors = ws_client.read_channel(ERROR_CHANNEL)
-        # read_all would consume ERR_CHANNEL, so read_all needs to be last
-        response = ws_client.read_all()
-        if errors:
-            # errors = '{"metadata":{},"status":"Success"}'
-            j = json.loads(errors)
-            status = j.get("status", None)
-            if status == "Success":
-                logger.info("exec command succeeded, yay!")
-                for m_dir in self.mapped_dirs:
-                    self._copy_path_from_pod(m_dir)
-            elif status == "Failure":
-                logger.info("exec command failed")
-                for m_dir in self.mapped_dirs:
-                    self._copy_path_from_pod(m_dir)
-                # ('{"metadata":{},"status":"Failure","message":"command terminated with '
-                #  'non-zero exit code: Error executing in Docker Container: '
-                #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
-                causes = j.get("details", {}).get("causes", [])
-                rc = 999
-                for c in causes:
-                    if c.get("reason", None) == "ExitCode":
-                        try:
-                            rc = int(c.get("message", None))
-                        except ValueError:
-                            rc = 999
-                raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
-            else:
-                logger.warning(
-                    "exec didn't yield the metadata we expect, mighty suspicious, %s",
-                    errors,
-                )
+        try:
+            # https://github.com/packit-service/sandcastle/issues/23
+            # even with a >0 number or ==0, select tends to block
+            # setting it 0 could make things better
+            ws_client.run_forever(timeout=0)
+            errors = ws_client.read_channel(ERROR_CHANNEL)
+            logger.debug("%s", errors)
+            # read_all would consume ERR_CHANNEL, so read_all needs to be last
+            response = ws_client.read_all()
+            if errors:
+                # errors = '{"metadata":{},"status":"Success"}'
+                j = json.loads(errors)
+                status = j.get("status", None)
+                if status == "Success":
+                    logger.info("exec command succeeded, yay!")
+                    self._copy_mdir_from_pod(unique_dir)
+                elif status == "Failure":
+                    logger.info("exec command failed")
+                    self._copy_mdir_from_pod(unique_dir)
+
+                    # ('{"metadata":{},"status":"Failure","message":"command terminated with '
+                    #  'non-zero exit code: Error executing in Docker Container: '
+                    #  '1","reason":"NonZeroExitCode","details":{"causes":[{"reason":"ExitCode","message":"1"}]}}')
+                    causes = j.get("details", {}).get("causes", [])
+                    rc = 999
+                    for c in causes:
+                        if c.get("reason", None) == "ExitCode":
+                            try:
+                                rc = int(c.get("message", None))
+                            except ValueError:
+                                rc = 999
+                    raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
+                else:
+                    logger.warning(
+                        "exec didn't yield the metadata we expect, mighty suspicious, %s",
+                        errors,
+                    )
+        finally:
+            ws_client.close()
 
         logger.debug("exec response = %r" % response)
         return response
 
-    def _copy_path_to_pod(self, m_dir: MappedDir):
-        """ copy local path inside the pod """
-        # Copy /tmp/foo local file to /tmp/bar
-        # in a remote pod in namespace <some-namespace>:
-        #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
-        target = f"{self.k8s_namespace_name}/{self.pod_name}:{m_dir.path}"
-        logger.info(f"copy {m_dir.local_dir} -> {target}")
-        # if you're interested: the way openshift does this is that creates a tarball locally
-        # and streams it via exec into the container to a pod process
-        for item in m_dir.local_dir.iterdir():
+    def _copy_path_to_pod(self, local_path: Path, pod_dir: Path):
+        """
+        copy local_path (dir or file) inside pod
+
+        :param local_path: path to a local file or a dir
+        :param pod_dir: Directory within the pod where the content of local_path is extracted
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_tarball_dir = Path(tmpdir)
+            tmp_tarball_path = tmp_tarball_dir.joinpath("t.tar.gz")
+            cmd = ["tar", "--preserve-permissions", "-czf", tmp_tarball_path]
+
+            working_dir = local_path
+            if local_path.is_file():
+                items = [local_path]
+                working_dir = local_path.parent
+            else:
+                # this has to be list, because mypy:
+                #   Incompatible types in assignment (expression has type
+                #     "Generator[Path, None, None]", variable has type "List[Path]")
+                items = list(local_path.iterdir())
             # tar: lost+found: Cannot utime: Operation not permitted
-            if item.name == "lost+found":
-                continue
-            # we are doing this insanity because of two things:
-            #   1. tar creates a root dir in the tarball, so we would need to cd into it
-            #   2. this way we can set working_dir to m_dir.path in the pod
-            logger.debug(f"copy item {item} -> {target}")
-            run_command(["oc", "cp", item, target])
+            # list comprehension no likey mypy
+            for x in items:
+                if x.name == "lost+found":
+                    continue
+                cmd.append(str(x.relative_to(working_dir)))
+            run_command(cmd, cwd=working_dir)
+            remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
+            try:
+                remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
+                # Copy /tmp/foo local file to /tmp/bar
+                # in a remote pod in namespace <some-namespace>:
+                #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
+                target = f"{self.k8s_namespace_name}/{self.pod_name}:{remote_tmp_dir}"
+                # if you're interested: the way openshift does this is that
+                # it creates a tarball locally
+                # and streams it via exec into the container to a pod process
+                run_command(["oc", "cp", tmp_tarball_path, target])
+                unpack_cmd = [
+                    "tar",
+                    "--preserve-permissions",
+                    "-xzf",
+                    str(remote_tar_path),
+                    "-C",
+                    str(pod_dir),
+                ]
+                self._do_exec(unpack_cmd)
+            finally:
+                self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
 
-    def _copy_path_from_pod(self, m_dir: MappedDir):
-        """ copy remote path content locally """
-        # Copy /tmp/foo from a remote pod to /tmp/bar locally
-        #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
-        target = f"{self.k8s_namespace_name}/{self.pod_name}:{m_dir.path}"
+    def _copy_path_from_pod(self, local_dir: Path, pod_dir: Path):
+        """
+        copy content of a dir from pod locally
 
-        # temp_dir = Path(tempfile.mkdtemp())
-        # logger.info(f"copy {target} -> {temp_dir}")
-        # run_command(["oc", "cp", target, temp_dir])
+        :param local_dir: path to the local dir
+        :param pod_dir: path within the pod
+        """
+        remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
+        try:
+            remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
+            pack_cmd = [
+                "tar",
+                "--preserve-permissions",
+                "-czf",
+                str(remote_tar_path),
+                "-C",
+                str(pod_dir),
+                ".",
+            ]
+            self._do_exec(pack_cmd)
 
-        purge_dir_content(m_dir.local_dir)
+            # Copy /tmp/foo from a remote pod to /tmp/bar locally
+            #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
+            target = f"{self.k8s_namespace_name}/{self.pod_name}:{remote_tar_path}"
+            fd, tmp_tarball_path = tempfile.mkstemp()
+            try:
+                os.close(fd)
 
-        logger.info(f"copy {target} -> {m_dir.local_dir}")
-        run_command(["oc", "cp", target, m_dir.local_dir])
+                logger.info(f"copy {target} -> {tmp_tarball_path}")
+                run_command(["oc", "cp", target, tmp_tarball_path])
+
+                purge_dir_content(local_dir)
+
+                unpack_cmd = [
+                    "tar",
+                    "--preserve-permissions",
+                    "-xzf",
+                    tmp_tarball_path,
+                    "-C",
+                    str(local_dir),
+                ]
+                run_command(unpack_cmd)
+            finally:
+                os.unlink(tmp_tarball_path)
+        finally:
+            self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
+
+    def _copy_mdir_from_pod(self, unique_dir: Path):
+        """ process mapped_dir after we are done execing """
+        if self.mapped_dir:
+            logger.debug("mapped_dir is set, let's sync the dir back and fix modes")
+            self._copy_path_from_pod(
+                local_dir=self.mapped_dir.local_dir, pod_dir=unique_dir
+            )
