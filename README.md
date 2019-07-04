@@ -1,4 +1,4 @@
-# Sandcastle
+# Sandcastle [![Build Status](https://ci.centos.org/job/sandcastle-master/badge/icon)](https://ci.centos.org/job/sandcastle-master/)
 
 Run untrusted code in a castle (OpenShift pod), which stands in a sandbox.
 
