@@ -31,11 +31,14 @@ node('userspace-containerization'){
 
             stage ("Setup"){
                 onmyduffynode "yum -y install epel-release"
-                onmyduffynode "yum -y install python36-pip rpmdevtools docker ansible"
+                onmyduffynode "yum -y install python36-pip python36-devel rpmdevtools docker ansible"
                 onmyduffynode "yum -y remove git"
                 onmyduffynode "curl -o /etc/yum.repos.d/git-epel-7.repo https://copr.fedorainfracloud.org/coprs/g/git-maint/git/repo/epel-7/group_git-maint-git-epel-7.repo"
                 onmyduffynode "yum -y install git-core"
                 onmyduffynode "pip3 install pre-commit"
+                onmyduffynode "pip3 install --upgrade pip"
+                onmyduffynode "export RPM_PY_SYS=true"
+                onmyduffynode "yum install -y rebase-helper krb5-libs krb5-devel krb5-workstation"
                 synctoduffynode "./." // copy all source files (hidden too, we need .git/)
             }
 
@@ -48,7 +51,11 @@ node('userspace-containerization'){
             }
 
             stage ("Tests"){
-                onmyduffynode "make check"
+                onmyduffynode "pytest --color=yes --verbose --showlocals ./tests"
+            }
+
+            stage ("Linters"){
+                    onmyduffynode "pre-commit run --all-files"
             }
 
         } catch (e) {
