@@ -39,23 +39,18 @@ node('userspace-containerization'){
                 synctoduffynode "./." // copy all source files (hidden too, we need .git/)
             }
 
-            def tasks = [:]
-            tasks["OpenShift"] = {
-                stage ("Setup Openshift Cluster"){
-                    onmyduffynode "ansible-playbook -v ./files/install-openshift"
-                }
+            stage ("Setup Openshift Cluster"){
+                onmyduffynode "ansible-playbook -v -i localhost, --connection=local ./files/install-openshift.yaml"
             }
-            tasks["Build test image"] = {
-                stage ("Linters"){
-                    onmyduffynode "make test-image-build"
-                }
+
+            stage ("Image build"){
+                onmyduffynode "make test-image-build"
             }
-            tasks["Tests"] = {
-                stage ("Linters"){
-                    onmyduffynode "make check"
-                }
+
+            stage ("Tests"){
+                onmyduffynode "make check"
             }
-            parallel tasks
+
         } catch (e) {
             currentBuild.result = "FAILURE"
             throw e

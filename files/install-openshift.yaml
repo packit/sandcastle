@@ -11,7 +11,7 @@
       state: present
   - name:
     pip:
-      executable: /usr/local/bin/pip3.7
+      executable: pip3
       requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
   - name: Install packit
     pip:
@@ -20,7 +20,7 @@
         - kubernetes
         - pytest
         - flexmock
-      executable: /usr/local/bin/pip3.7
+      executable: pip3
   - name: Disable SELinux
     command: setenforce 0
   - name: Disable firewall
