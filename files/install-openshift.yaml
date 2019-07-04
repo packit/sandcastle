@@ -1,0 +1,59 @@
+---
+- name: Install dependencies for sandcastle.
+  hosts: all
+  tasks:
+  - name: Install basic utilities which should be in a sandbox.
+    yum:
+      name:
+      - git
+      - rpmdevtools
+      - docker
+      state: present
+  - name:
+    pip:
+      executable: pip3
+      requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
+  - name: Install packit
+    pip:
+      name:
+        - packitos
+        - kubernetes==8.0.0
+        - pytest
+        - flexmock
+      executable: pip3
+  - name: Disable SELinux
+    command: setenforce 0
+  - name: Disable firewall
+    command: systemctl stop firewalld # firewall on CentOS does not allow docker login into OpenShift registry
+  - name: Start docker deamon
+    command: systemctl start docker
+  - name: Create docker deamon config
+    file:
+      path: /etc/docker/daemon.json
+      state: touch
+  - name: Add OpenShift insecure registry into docker deamon config
+    copy:
+      content: |
+        {"insecure-registries" : [ "172.30.0.0/16" ]}
+      dest: /etc/docker/daemon.json
+  - name: Restart docker because config has changed
+    command: systemctl restart docker
+  - name: Install OpenShift server
+    yum:
+      name:
+      - centos-release-openshift-origin310
+      state: present
+  - name: Install OpenShift client
+    yum:
+      name:
+      - origin-clients
+      state: present
+  - name: Start Openshift cluster
+    command: oc cluster up --base-dir=/tmp
+    environment:
+      PATH: "{{ ansible_env.PATH}}:/usr/local/bin"
+      DOCKER_CONFIG: "/etc/docker/daemon.json"
+
+  # https://github.com/packit-service/sandcastle#developing-sandcastle
+  - name: Add permissions for service account
+    command: oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
