@@ -87,10 +87,7 @@ def run_test_within_pod(
     cont_cmd = [
         "bash",
         "-c",
-        "ls -lha "
-        "&& id "
-        "&& pytest-3 --collect-only"
-        f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
+        "ls -lha " f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
     ]
 
     container: Dict[str, Any] = {

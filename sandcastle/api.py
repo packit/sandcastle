@@ -493,8 +493,7 @@ class Sandcastle(object):
         try:
             # https://github.com/packit-service/sandcastle/issues/23
             # even with a >0 number or ==0, select tends to block
-            # setting it 0 could make things better
-            ws_client.run_forever(timeout=0)
+            ws_client.run_forever(timeout=60.0)
             errors = ws_client.read_channel(ERROR_CHANNEL)
             logger.debug("%s", errors)
             # read_all would consume ERR_CHANNEL, so read_all needs to be last
@@ -594,15 +593,11 @@ class Sandcastle(object):
         remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
         try:
             remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
-            pack_cmd = [
-                "tar",
-                "--preserve-permissions",
-                "-czf",
-                str(remote_tar_path),
-                "-C",
-                str(pod_dir),
-                ".",
-            ]
+            grc = (
+                rf"cd {pod_dir} && ls -d -1 .* * | egrep -v '^\.$' | egrep -v '^\.\.$'"
+            )
+            tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
+            pack_cmd = ["bash", "-c", tar_cmd]
             self._do_exec(pack_cmd)
 
             # Copy /tmp/foo from a remote pod to /tmp/bar locally
