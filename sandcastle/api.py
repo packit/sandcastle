@@ -593,15 +593,11 @@ class Sandcastle(object):
         remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
         try:
             remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
-            pack_cmd = [
-                "tar",
-                "--preserve-permissions",
-                "-czf",
-                str(remote_tar_path),
-                "-C",
-                str(pod_dir),
-                ".",
-            ]
+            grc = (
+                rf"cd {pod_dir} && ls -d -1 .* * | egrep -v '^\.$' | egrep -v '^\.\.$'"
+            )
+            tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
+            pack_cmd = ["bash", "-c", tar_cmd]
             self._do_exec(pack_cmd)
 
             # Copy /tmp/foo from a remote pod to /tmp/bar locally
