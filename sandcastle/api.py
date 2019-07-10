@@ -493,8 +493,7 @@ class Sandcastle(object):
         try:
             # https://github.com/packit-service/sandcastle/issues/23
             # even with a >0 number or ==0, select tends to block
-            # setting it 0 could make things better
-            ws_client.run_forever(timeout=0)
+            ws_client.run_forever(timeout=60.0)
             errors = ws_client.read_channel(ERROR_CHANNEL)
             logger.debug("%s", errors)
             # read_all would consume ERR_CHANNEL, so read_all needs to be last
