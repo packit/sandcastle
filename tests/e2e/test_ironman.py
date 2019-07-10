@@ -269,7 +269,7 @@ def test_lost_found_is_ignored(tmpdir):
     try:
         o.exec(command=["ls", "-lha", "./"])
         with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["ls", f"./lost+found"])
+            o.exec(command=["ls", "./lost+found"])
         assert "No such file or directory" in str(ex.value)
     finally:
         o.delete_pod()
