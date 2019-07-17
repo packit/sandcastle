@@ -73,6 +73,8 @@ from sandcastle.utils import (
 
 logger = logging.getLogger(__name__)
 
+WEBSOCKET_CALL_TIMEOUT = 30.0  # seconds
+
 
 class MappedDir:
     """
@@ -435,6 +437,7 @@ class Sandcastle(object):
             stdout=True,
             tty=False,
             _preload_content=preload_content,  # <<< we need a client object
+            _request_timeout=WEBSOCKET_CALL_TIMEOUT,
         )
 
     def _prepare_mdir_exec(
@@ -493,7 +496,7 @@ class Sandcastle(object):
         try:
             # https://github.com/packit-service/sandcastle/issues/23
             # even with a >0 number or ==0, select tends to block
-            ws_client.run_forever(timeout=60.0)
+            ws_client.run_forever(timeout=WEBSOCKET_CALL_TIMEOUT)
             errors = ws_client.read_channel(ERROR_CHANNEL)
             logger.debug("%s", errors)
             # read_all would consume ERR_CHANNEL, so read_all needs to be last
