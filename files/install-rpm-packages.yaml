@@ -20,7 +20,7 @@
   - name: Install all RPM packages needed to hack on sandcastle.
     dnf:
       name:
-      - git
+      - git-core
       - python3-devel
       - python3-ipdb  # for easy debugging
       - python3-pip
