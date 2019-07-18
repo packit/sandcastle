@@ -20,7 +20,7 @@
   - name: Install all RPM packages needed to hack on sandcastle.
     dnf:
       name:
-      - git
+      - git-core
       - python3-devel
       - python3-ipdb  # for easy debugging
       - python3-pip
@@ -28,33 +28,33 @@
       - python3-setuptools_scm
       - python3-setuptools_scm_git_archive
       - origin-clients  # oc cp
-
       - python3-pytest  # tests
       - python3-flexmock
+      - python3-kubernetes
       state: present
     tags:
     - with-sandcastle-deps
-  - name: Install python-kube
-    block:
-    - name: tmpdir
-      tempfile:
-        state: directory
-      register: tmpdir
-    - name: clone to tmpdir
-      git:
-        repo: https://github.com/TomasTomecek/kubernetes-python.git
-        recursive: true
-        dest: '{{ tmpdir.path }}'
-    - name: install
-      pip:
-        executable: /usr/bin/pip3
-        name: 'file://{{ tmpdir.path }}'
-    - name: clean tmpdir
-      file:
-        path: '{{ tmpdir.path }}'
-        state: absent
-    tags:
-    - with-sandcastle-deps
+#   - name: Install python-kube
+#     block:
+#     - name: tmpdir
+#       tempfile:
+#         state: directory
+#       register: tmpdir
+#     - name: clone to tmpdir
+#       git:
+#         repo: https://github.com/TomasTomecek/kubernetes-python.git
+#         recursive: true
+#         dest: '{{ tmpdir.path }}'
+#     - name: install
+#       pip:
+#         executable: /usr/bin/pip3
+#         name: 'file://{{ tmpdir.path }}'
+#     - name: clean tmpdir
+#       file:
+#         path: '{{ tmpdir.path }}'
+#         state: absent
+#     tags:
+#     - with-sandcastle-deps
   - name:
     pip:
       executable: /usr/bin/pip3
