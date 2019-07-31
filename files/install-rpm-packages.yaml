@@ -18,6 +18,7 @@
       - wget
       - curl
       - findutils
+      - npm  # cockpit project needs these
       state: present
     tags:
     - basic-image
