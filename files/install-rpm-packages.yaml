@@ -19,6 +19,7 @@
       - curl
       - findutils
       - npm  # cockpit project needs these
+      - python3-docutils  # for those who generates man pages from README.md
       state: present
     tags:
     - basic-image
