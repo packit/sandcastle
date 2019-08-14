@@ -131,8 +131,8 @@ def purge_dir_content(di: Path):
     """ remove everything in the dir but not the dir itself """
     dir_items = list(di.iterdir())
     if dir_items:
-        logger.info("the dir is not empty")
-        logger.debug("content of the dir: %s" % dir_items)
+        logger.info(f"dir {di} is not empty")
+        logger.debug("content: %s" % [i.name for i in dir_items])
     for item in dir_items:
         if item.is_file():
             item.unlink()
