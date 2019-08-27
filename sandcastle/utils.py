@@ -134,7 +134,8 @@ def purge_dir_content(di: Path):
         logger.info(f"dir {di} is not empty")
         logger.debug("content: %s" % [i.name for i in dir_items])
     for item in dir_items:
-        if item.is_file():
+        # symlink pointing to a dir is also a dir and a symlink
+        if item.is_file() or item.is_symlink():
             item.unlink()
         else:
             shutil.rmtree(item)
