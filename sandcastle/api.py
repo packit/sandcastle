@@ -74,6 +74,8 @@ from sandcastle.utils import (
 logger = logging.getLogger(__name__)
 
 WEBSOCKET_CALL_TIMEOUT = 30.0  # seconds
+# try to initiate WS Client 5 times
+MAGIC_KONSTANT = 5
 
 
 class MappedDir:
@@ -427,18 +429,27 @@ class Sandcastle(object):
     def _do_exec(
         self, command: List[str], preload_content=True
     ) -> Union[WSClient, str]:
-        return stream(
-            self.api.connect_get_namespaced_pod_exec,
-            self.pod_name,
-            self.k8s_namespace_name,
-            command=command,
-            stdin=False,
-            stderr=True,
-            stdout=True,
-            tty=False,
-            _preload_content=preload_content,  # <<< we need a client object
-            _request_timeout=WEBSOCKET_CALL_TIMEOUT,
-        )
+        for i in range(MAGIC_KONSTANT):
+            try:
+                return stream(
+                    self.api.connect_get_namespaced_pod_exec,
+                    self.pod_name,
+                    self.k8s_namespace_name,
+                    command=command,
+                    stdin=False,
+                    stderr=True,
+                    stdout=True,
+                    tty=False,
+                    _preload_content=preload_content,  # <<< we need a client object
+                    _request_timeout=WEBSOCKET_CALL_TIMEOUT,
+                )
+            except ApiException as ex:
+                # in packit-service prod, occasionally 'No route to host' happens here
+                # let's try to repeat the request
+                logger.error("exception while initiating WS Client: %r", ex)
+                time.sleep(i + 1)
+                continue
+        raise SandcastleException("Unable to connect to kubernetes API server.")
 
     def _prepare_mdir_exec(
         self, command: List[str], target_dir: Optional[Path] = None
