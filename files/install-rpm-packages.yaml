@@ -11,6 +11,7 @@
       - rpmdevtools
       - automake
       - autoconf
+      - libtool  # https://github.com/TomasTomecek/libnbd/pull/1#issuecomment-554378236
       - tito
       - cmake
       - meson
