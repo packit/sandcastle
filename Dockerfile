@@ -5,6 +5,7 @@ FROM registry.fedoraproject.org/fedora:30
 
 # ANSIBLE_STDOUT_CALLBACK - nicer output from the playbook run
 ENV LANG=en_US.UTF-8 \
+    LC_ALL=C \
     PYTHONDONTWRITEBYTECODE=yes \
     WORKDIR=/src \
     ANSIBLE_STDOUT_CALLBACK=debug
