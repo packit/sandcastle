@@ -212,6 +212,10 @@ def test_manifest(init_openshift_deployer):
                     "name": od.pod_name,
                     "env": [{"name": KEY, "value": VALUE}],
                     "imagePullPolicy": "IfNotPresent",
+                    "resources": {
+                        "limits": {"memory": "512Mi"},
+                        "requests": {"memory": "512Mi"},
+                    },
                 }
             ],
             "restartPolicy": "Never",

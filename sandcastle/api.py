@@ -171,6 +171,10 @@ class Sandcastle(object):
             "name": self.pod_name,
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
+            "resources": {
+                "limits": {"memory": "512Mi"},
+                "requests": {"memory": "512Mi"},
+            },
         }
         spec = {
             "containers": [container],
