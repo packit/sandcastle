@@ -450,8 +450,8 @@ class Sandcastle(object):
             except ApiException as ex:
                 # in packit-service prod, occasionally 'No route to host' happens here
                 # let's try to repeat the request
-                logger.error("exception while initiating WS Client: %r", ex)
-                time.sleep(i + 1)
+                logger.error("exception while initiating WS Client: %s", ex)
+                time.sleep(2 * i + 1)
                 continue
         raise SandcastleException("Unable to connect to kubernetes API server.")
 
