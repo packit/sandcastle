@@ -21,6 +21,7 @@
       - findutils
       - npm  # cockpit project needs these
       - python3-docutils  # for those who generates man pages from README.md
+      - json-c # https://github.com/Scribery/tlog/pull/274#issuecomment-564117626
       state: present
     tags:
     - basic-image
