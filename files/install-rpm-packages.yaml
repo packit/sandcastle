@@ -24,6 +24,7 @@
       - json-c-devel  # \
       - systemd-devel # https://github.com/Scribery/tlog/pull/274
       - libcurl-devel # /
+      - python3-zanata-client # for those who use zanata for localization
       state: present
     tags:
     - basic-image
