@@ -19,6 +19,7 @@
       - wget
       - curl
       - findutils
+      - which
       - npm  # cockpit project needs these
       - python3-docutils  # for those who generates man pages from README.md
       - json-c-devel  # \
