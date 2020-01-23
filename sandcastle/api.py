@@ -155,7 +155,7 @@ class Sandcastle(object):
 
         self.working_dir = working_dir
         if working_dir and mapped_dir:
-            logger.warning("Ignoring warning_dir becase mapped_dir is set.")
+            logger.warning("Ignoring working_dir because mapped_dir is set.")
             self.working_dir = None
         self.api: client.CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
