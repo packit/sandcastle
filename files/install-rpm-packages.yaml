@@ -70,7 +70,7 @@
 #         state: absent
 #     tags:
 #     - with-sandcastle-deps
-  - name:
+  - name: Install tests requirements
     pip:
       executable: /usr/bin/pip3
       requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
