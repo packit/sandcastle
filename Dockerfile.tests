@@ -2,6 +2,9 @@
 # The expectation is to create sandbox pods from this one.
 FROM docker.io/usercont/sandcastle
 
+ENV ANSIBLE_PYTHON_INTERPRETER=/usr/bin/python3 \
+    ANSIBLE_STDOUT_CALLBACK=debug
+
 COPY tests/requirements.txt /src/tests/requirements.txt
 # Install packages first and reuse the cache as much as possible
 RUN cd /src/ \

@@ -2,10 +2,10 @@
 
 Run untrusted code in a castle (OpenShift pod), which stands in a sandbox.
 
-
 ## Usage
 
 The prerequisite is that you're logged in an OpenShift cluster:
+
 ```
 $ oc status
  In project Local Project (myproject) on server https://localhost:8443
@@ -25,21 +25,22 @@ output = s.run(command=["ls", "-lha"])
 
 These things will happen:
 
-* A new pod is created, using the image set in `image_reference`.
-* The library actively waits for the pod to finish.
-* If the pod terminates with a return code greater than 0, an exception is raised.
-* Output of the command is return from the `.run()` method.
-
+- A new pod is created, using the image set in `image_reference`.
+- The library actively waits for the pod to finish.
+- If the pod terminates with a return code greater than 0, an exception is raised.
+- Output of the command is return from the `.run()` method.
 
 ### Sharing data between sandbox and current pod
 
 This library allows you to share volumes between the pod it is running in and between sandbox.
 
 There is a dedicated class and an interface to access this functionality:
-* `VolumeSpec` class
-* `volume_mounts` kwarg of Sandcastle constructor
+
+- `VolumeSpec` class
+- `volume_mounts` kwarg of Sandcastle constructor
 
 An example is worth of thousand words:
+
 ```python
 from pathlib import Path
 from sandcastle import Sandcastle, VolumeSpec
@@ -72,6 +73,7 @@ policy](https://docs.openshift.com/container-platform/3.6/admin_guide/managing_n
 When you set up this sandbox namespace, please make sure that service account
 of namespace your app is deployed in can manage pods in the sandbox namespace.
 This command should help:
+
 ```bash
 $ oc adm -n ${SANDBOX_NAMESPACE} policy add-role-to-user edit system:serviceaccount:${APP_NAMESPACE}:default
 ```
@@ -118,6 +120,7 @@ In order to develop this project (and run tests), there are several requirements
    doesn't have permissions to create nor delete pods (so the sandboxing would
    not work). With this command, the SA is allowed to change any objects in the
    namespace:
+
    ```
    oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
    ```
