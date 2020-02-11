@@ -213,6 +213,13 @@ def test_md_e2e(tmpdir, git_url, branch):
         o.exec(command=["packit", "--debug", "srpm"])
         assert list(t.glob("*.src.rpm"))
         o.exec(command=["packit", "--help"])
+
+        with pytest.raises(SandcastleCommandFailed) as ex:
+            o.exec(command=["bash", "-c", "echo 'I quit!'; exit 120"])
+        e = ex.value
+        assert "I quit!" in e.output
+        assert 120 == e.rc
+        assert "command terminated with non-zero exit code" in e.reason
     finally:
         o.delete_pod()
 
