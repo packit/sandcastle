@@ -1,6 +1,6 @@
 # This is the default sandbox container image to run untrusted commands.
 # It should contain basic utilities, such as git, make, rpmbuild, etc.
-FROM registry.fedoraproject.org/fedora:30
+FROM fedora:31
 
 # ANSIBLE_STDOUT_CALLBACK - nicer output from the playbook run
 ENV LANG=en_US.UTF-8 \
