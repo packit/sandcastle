@@ -620,7 +620,12 @@ class Sandcastle(object):
             )
             tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
             pack_cmd = ["bash", "-c", tar_cmd]
-            self._do_exec(pack_cmd)
+            output = self._do_exec(pack_cmd)
+            if output:
+                logger.debug(f"output from tar -czf: {output!r}")
+            # let's make sure the archive is present
+            output = self._do_exec(["ls", "-lh", str(remote_tar_path)])
+            logger.debug(f"the archive in the pod: {output!r}")
 
             # Copy /tmp/foo from a remote pod to /tmp/bar locally
             #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
