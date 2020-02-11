@@ -435,7 +435,7 @@ class Sandcastle(object):
     ) -> Union[WSClient, str]:
         for i in range(MAGIC_KONSTANT):
             try:
-                return stream.stream(
+                s = stream.stream(
                     self.api.connect_get_namespaced_pod_exec,
                     self.pod_name,
                     self.k8s_namespace_name,
@@ -447,6 +447,8 @@ class Sandcastle(object):
                     _preload_content=preload_content,  # <<< we need a client object
                     _request_timeout=WEBSOCKET_CALL_TIMEOUT,
                 )
+                logger.debug("we have successfully initiated the kube api client")
+                return s
             except ApiException as ex:
                 # in packit-service prod, occasionally 'No route to host' happens here
                 # let's try to repeat the request
@@ -525,6 +527,8 @@ class Sandcastle(object):
                     self._copy_mdir_from_pod(unique_dir)
                 elif status == "Failure":
                     logger.info("exec command failed")
+                    logger.debug(j)
+                    logger.error(f"output = {response!r}")
                     self._copy_mdir_from_pod(unique_dir)
 
                     # ('{"metadata":{},"status":"Failure","message":"command terminated with '
@@ -625,7 +629,6 @@ class Sandcastle(object):
             try:
                 os.close(fd)
 
-                logger.info(f"copy {target} -> {tmp_tarball_path}")
                 run_command(["oc", "cp", target, tmp_tarball_path])
 
                 purge_dir_content(local_dir)
