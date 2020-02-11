@@ -54,7 +54,7 @@ from typing import Dict, List, Optional, Union, Tuple
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream
+from kubernetes import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import (
@@ -435,7 +435,7 @@ class Sandcastle(object):
     ) -> Union[WSClient, str]:
         for i in range(MAGIC_KONSTANT):
             try:
-                return stream(
+                return stream.stream(
                     self.api.connect_get_namespaced_pod_exec,
                     self.pod_name,
                     self.k8s_namespace_name,
