@@ -453,7 +453,7 @@ class Sandcastle(object):
                 logger.error("exception while initiating WS Client: %s", ex)
                 time.sleep(2 * i + 1)
                 continue
-        raise SandcastleException("Unable to connect to kubernetes API server.")
+        raise SandcastleException("Unable to connect to the kubernetes API server.")
 
     def _prepare_mdir_exec(
         self, command: List[str], target_dir: Optional[Path] = None
