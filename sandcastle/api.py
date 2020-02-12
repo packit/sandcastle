@@ -54,7 +54,7 @@ from typing import Dict, List, Optional, Union, Tuple
 from kubernetes import config, client
 from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream
+from kubernetes import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import (
@@ -435,7 +435,7 @@ class Sandcastle(object):
     ) -> Union[WSClient, str]:
         for i in range(MAGIC_KONSTANT):
             try:
-                return stream(
+                s = stream.stream(
                     self.api.connect_get_namespaced_pod_exec,
                     self.pod_name,
                     self.k8s_namespace_name,
@@ -447,13 +447,15 @@ class Sandcastle(object):
                     _preload_content=preload_content,  # <<< we need a client object
                     _request_timeout=WEBSOCKET_CALL_TIMEOUT,
                 )
+                logger.debug("we have successfully initiated the kube api client")
+                return s
             except ApiException as ex:
                 # in packit-service prod, occasionally 'No route to host' happens here
                 # let's try to repeat the request
-                logger.error("exception while initiating WS Client: %s", ex)
+                logger.warning("exception while initiating WS Client: %s", ex)
                 time.sleep(2 * i + 1)
                 continue
-        raise SandcastleException("Unable to connect to kubernetes API server.")
+        raise SandcastleException("Unable to connect to the kubernetes API server.")
 
     def _prepare_mdir_exec(
         self, command: List[str], target_dir: Optional[Path] = None
@@ -525,6 +527,8 @@ class Sandcastle(object):
                     self._copy_mdir_from_pod(unique_dir)
                 elif status == "Failure":
                     logger.info("exec command failed")
+                    logger.debug(j)
+                    logger.error(f"output = {response!r}")
                     self._copy_mdir_from_pod(unique_dir)
 
                     # ('{"metadata":{},"status":"Failure","message":"command terminated with '
@@ -616,7 +620,12 @@ class Sandcastle(object):
             )
             tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
             pack_cmd = ["bash", "-c", tar_cmd]
-            self._do_exec(pack_cmd)
+            output = self._do_exec(pack_cmd)
+            if output:
+                logger.debug(f"output from tar -czf: {output!r}")
+            # let's make sure the archive is present
+            output = self._do_exec(["ls", "-lh", str(remote_tar_path)])
+            logger.debug(f"the archive in the pod: {output!r}")
 
             # Copy /tmp/foo from a remote pod to /tmp/bar locally
             #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
@@ -625,7 +634,6 @@ class Sandcastle(object):
             try:
                 os.close(fd)
 
-                logger.info(f"copy {target} -> {tmp_tarball_path}")
                 run_command(["oc", "cp", target, tmp_tarball_path])
 
                 purge_dir_content(local_dir)

@@ -21,11 +21,21 @@
 # SOFTWARE.
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
+from flexmock import flexmock
+from kubernetes import stream
+from kubernetes.client.rest import ApiException
 
-from sandcastle import Sandcastle, VolumeSpec, SandcastleTimeoutReached, MappedDir
+from sandcastle import (
+    Sandcastle,
+    VolumeSpec,
+    SandcastleTimeoutReached,
+    MappedDir,
+    SandcastleException,
+)
 from sandcastle.exceptions import SandcastleCommandFailed
 from sandcastle.utils import run_command, get_timestamp_now, purge_dir_content
 from tests.conftest import (
@@ -203,6 +213,13 @@ def test_md_e2e(tmpdir, git_url, branch):
         o.exec(command=["packit", "--debug", "srpm"])
         assert list(t.glob("*.src.rpm"))
         o.exec(command=["packit", "--help"])
+
+        with pytest.raises(SandcastleCommandFailed) as ex:
+            o.exec(command=["bash", "-c", "echo 'I quit!'; exit 120"])
+        e = ex.value
+        assert "I quit!" in e.output
+        assert 120 == e.rc
+        assert "command terminated with non-zero exit code" in e.reason
     finally:
         o.delete_pod()
 
@@ -332,6 +349,7 @@ def test_changing_mode(tmpdir):
         ("test_lost_found_is_ignored", None),
         ("test_md_new_namespace", {"new_namespace": True}),
         ("test_changing_mode", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
+        ("test_k8s_cli_init_fails", None),
     ),
 )
 def test_from_pod(build_now, test_name, kwargs):
@@ -339,3 +357,19 @@ def test_from_pod(build_now, test_name, kwargs):
     path = f"tests/e2e/test_ironman.py::{test_name}"
     kwargs = kwargs or {}
     run_test_within_pod(path, **kwargs)
+
+
+def test_k8s_cli_init_fails():
+    def mocked_stream(*args, **kwargs):
+        raise ApiException("(0) Reason: [Errno 113] No route to host")
+
+    flexmock(stream, stream=mocked_stream)
+    flexmock(time, sleep=lambda seconds: None)
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    try:
+        with pytest.raises(SandcastleException) as ex:
+            o.exec(command=["ls", "-lha"])
+        assert "Unable to connect to the kubernetes API server." in str(ex.value)
+    finally:
+        o.delete_pod()
