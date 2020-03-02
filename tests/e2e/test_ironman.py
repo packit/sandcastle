@@ -192,7 +192,7 @@ def test_file_got_changed(tmpdir):
     "git_url,branch",
     (
         ("https://github.com/packit-service/hello-world.git", "master"),
-        ("https://github.com/packit-service/packit.git", "master"),
+        ("https://github.com/packit-service/ogr.git", "master"),
     ),
 )
 def test_md_e2e(tmpdir, git_url, branch):

@@ -634,7 +634,23 @@ class Sandcastle(object):
             try:
                 os.close(fd)
 
-                run_command(["oc", "cp", target, tmp_tarball_path])
+                count = 3
+                while True:
+                    try:
+                        run_command(["oc", "cp", target, tmp_tarball_path])
+                        break
+                    except Exception as ex:
+                        # this is where all the fun happens - we have confirmed the archive
+                        # is inside, but oc failed to copy it - why?
+                        # let's look again what's inside and try again
+                        logger.warning(f"Unable to copy data from the sandbox: {ex!r}")
+                        output = self._do_exec(
+                            ["ls", "-lh", str(remote_tar_path.parent)]
+                        )
+                        logger.info(f"files in the pod: {output!r}")
+                        count -= 1
+                        if count < 0:
+                            raise
 
                 purge_dir_content(local_dir)
 
