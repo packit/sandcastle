@@ -30,7 +30,10 @@
           - python3-zanata-client # for those who use zanata for localization
           - python2 # https://github.com/packit-service/sandcastle/issues/49
           - python2-setuptools # /
-          - python3-pocketlint # https://github.com/storaged-project/blivet-gui/pull/142
+          - python3-pocketlint # https://github.com/storaged-project/blivet-gui/pull/142 & anaconda
+          - glib2-devel # anaconda
+          - gettext-devel # anaconda
+          - python3-polib # anaconda
         state: present
         install_weak_deps: no # on F30 python2 pulls in unwanted python-unversioned-command
       tags:
