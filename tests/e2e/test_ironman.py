@@ -73,21 +73,35 @@ def test_run_failure():
         o.delete_pod()
 
 
-def test_exec_failure():
+@pytest.mark.parametrize(
+    "cmd,should_fail",
+    (
+        (["ls", "/hauskrecht"], True),
+        (["ls /hauskrecht"], True),
+        (["ls", "/haus*ht"], True),
+        (["ls /etc/passwd"], False),
+        (["ls", "/etc/*wd"], False),
+        (["ls /etc/*wd"], False),
+        (["bash -c 'ls /etc/passwd'"], False),
+        (["bash -c 'ls /etc/*wd'"], False),
+    ),
+)
+def test_exec(cmd, should_fail):
     o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     o.run()
     try:
-        with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["ls", "/hauskrecht"])
-        assert (
-            ex.value.output
-            == "ls: cannot access '/hauskrecht': No such file or directory\n"
-        )
-        assert isinstance(ex.value, SandcastleCommandFailed)
-        assert "2" in ex.value.reason
-        assert "ExitCode" in ex.value.reason
-        assert "NonZeroExitCode" in ex.value.reason
-        assert ex.value.rc == 2
+        if should_fail:
+            with pytest.raises(SandcastleCommandFailed) as ex:
+                o.exec(command=cmd)
+            assert "No such file or directory\n" in ex.value.output
+            assert "ls: cannot access " in ex.value.output
+            assert isinstance(ex.value, SandcastleCommandFailed)
+            assert "2" in ex.value.reason
+            assert "ExitCode" in ex.value.reason
+            assert "NonZeroExitCode" in ex.value.reason
+            assert ex.value.rc == 2
+        else:
+            assert o.exec(command=cmd)
     finally:
         o.delete_pod()
 
@@ -108,10 +122,10 @@ def test_dir_sync(tmpdir):
     d.mkdir()
     d.joinpath("file").write_text("asd")
     try:
-        o.exec(command=["bash", "-c", "ls -lha /asdqwe/dir/file"])
-        o.exec(command=["bash", "-c", "[[ 'asd' == $(cat /asdqwe/dir/file) ]]"])
-        o.exec(command=["bash", "-c", "mkdir /asdqwe/dir/d"])
-        o.exec(command=["bash", "-c", "touch /asdqwe/dir/f"])
+        o.exec(command=["ls -lha /asdqwe/dir/file"])
+        o.exec(command=["[[ 'asd' == $(cat /asdqwe/dir/file) ]]"])
+        o.exec(command=["mkdir /asdqwe/dir/d"])
+        o.exec(command=["touch /asdqwe/dir/f"])
         assert Path("/asdqwe/dir/d").is_dir()
         assert Path("/asdqwe/dir/f").is_file()
     finally:
@@ -149,12 +163,55 @@ def test_exec_succ_pod(tmpdir):
         o.delete_pod()
 
 
-def test_md_multiple_exec(tmpdir):
+@pytest.mark.parametrize(
+    "cmd,should_fail",
+    (
+        (["ls", "/hauskrecht"], True),
+        (["ls /hauskrecht"], True),
+        (["ls", "/haus*ht"], True),
+        (["ls /etc/passwd"], False),
+        (["ls", "/etc/*wd"], False),
+        (["ls /etc/*wd"], False),
+        (["bash -c 'ls /etc/passwd'"], False),
+        (["bash -c 'ls /etc/*wd'"], False),
+    ),
+)
+def test_md_exec(tmpdir, cmd, should_fail):
+    """
+    make sure commands are exec'd properly in the sandbox with mapped dirs
+    this is what we use in p-s with RW vols
+    """
     p = Path(tmpdir)
+    # something needs to be inside
+    p.joinpath("dummy.file").write_text("something")
     m_dir = MappedDir(str(p), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
+    )
+    o.run()
+    try:
+        if should_fail:
+            with pytest.raises(SandcastleCommandFailed) as ex:
+                o.exec(command=cmd)
+            assert "No such file or directory\n" in ex.value.output
+            assert "ls: cannot access " in ex.value.output
+            assert isinstance(ex.value, SandcastleCommandFailed)
+            assert "2" in ex.value.reason
+            assert "ExitCode" in ex.value.reason
+            assert "NonZeroExitCode" in ex.value.reason
+            assert ex.value.rc == 2
+        else:
+            o.exec(command=cmd)
+    finally:
+        o.delete_pod()
+
+
+def test_md_multiple_exec(tmpdir):
+    p = Path(tmpdir)
     p.joinpath("stark").mkdir()
     p.joinpath("qwe").write_text("Hello, Tony!")
+    m_dir = MappedDir(str(p), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
@@ -182,7 +239,7 @@ def test_file_got_changed(tmpdir):
     )
     o.run()
     try:
-        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>./qwe"])
+        o.exec(command=["echo '\nHello, Tony Stark!' >>./qwe"])
         assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
     finally:
         o.delete_pod()
@@ -215,7 +272,7 @@ def test_md_e2e(tmpdir, git_url, branch):
         o.exec(command=["packit", "--help"])
 
         with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["bash", "-c", "echo 'I quit!'; exit 120"])
+            o.exec(command=["echo 'I quit!'; exit 120"])
         e = ex.value
         assert "I quit!" in e.output
         assert 120 == e.rc
@@ -251,8 +308,6 @@ def test_md_new_namespace(tmpdir):
             o.exec(command=["ls", "-lha", f"./dir/file"])
             assert d.joinpath("file").read_text() == "asd"
             cmd = [
-                "bash",
-                "-c",
                 "curl -skL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
             ]
             out = o.exec(command=cmd)
@@ -338,7 +393,8 @@ def test_changing_mode(tmpdir):
     "test_name,kwargs",
     (
         ("test_basic_e2e_inside", None),
-        ("test_exec_failure", None),
+        ("test_exec", None),
+        ("test_md_exec", None),
         ("test_run_failure", None),
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
         ("test_pod_sa_not_in_sandbox", None),
