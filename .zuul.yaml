@@ -1,0 +1,9 @@
+---
+- project:
+    name: packit-service/sandcastle
+    check:
+      jobs:
+        - pre-commit
+    gate:
+      jobs:
+        - pre-commit
