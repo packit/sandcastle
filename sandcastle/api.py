@@ -233,16 +233,12 @@ class Sandcastle(object):
 
     @staticmethod
     def build_env_image_vars(env_dict: Dict) -> List:
-        env_image_vars = []
         if not env_dict:
             return []
-        for key, value in env_dict.items():
-            if value:
-                value = str(value)
-            else:
-                value = ""
-            env_image_vars.append({"name": str(key), "value": value})
-        return env_image_vars
+        return [
+            {"name": str(key), "value": str(value) if value else ""}
+            for key, value in env_dict.items()
+        ]
 
     @staticmethod
     def get_api_client() -> client.CoreV1Api:

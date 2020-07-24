@@ -305,7 +305,7 @@ def test_md_new_namespace(tmpdir):
         )
         o.run()
         try:
-            o.exec(command=["ls", "-lha", f"./dir/file"])
+            o.exec(command=["ls", "-lha", "./dir/file"])
             assert d.joinpath("file").read_text() == "asd"
             cmd = [
                 "curl -skL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
