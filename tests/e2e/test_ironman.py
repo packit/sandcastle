@@ -77,13 +77,11 @@ def test_run_failure():
     "cmd,should_fail",
     (
         (["ls", "/hauskrecht"], True),
-        (["ls /hauskrecht"], True),
         (["ls", "/haus*ht"], True),
-        (["ls /etc/passwd"], False),
-        (["ls", "/etc/*wd"], False),
-        (["ls /etc/*wd"], False),
-        (["bash -c 'ls /etc/passwd'"], False),
-        (["bash -c 'ls /etc/*wd'"], False),
+        (["ls", "/etc/*wd"], True),
+        (["ls", "/etc/passwd"], False),
+        (["bash", "-c", "ls /etc/passwd"], False),
+        (["bash", "-c", "ls /etc/*wd"], False),
     ),
 )
 def test_exec(cmd, should_fail):
@@ -122,10 +120,10 @@ def test_dir_sync(tmpdir):
     d.mkdir()
     d.joinpath("file").write_text("asd")
     try:
-        o.exec(command=["ls -lha /asdqwe/dir/file"])
-        o.exec(command=["[[ 'asd' == $(cat /asdqwe/dir/file) ]]"])
-        o.exec(command=["mkdir /asdqwe/dir/d"])
-        o.exec(command=["touch /asdqwe/dir/f"])
+        o.exec(command=["bash", "-c", "ls -lha /asdqwe/dir/file"])
+        o.exec(command=["bash", "-c", "[[ 'asd' == $(cat /asdqwe/dir/file) ]]"])
+        o.exec(command=["bash", "-c", "mkdir /asdqwe/dir/d"])
+        o.exec(command=["bash", "-c", "touch /asdqwe/dir/f"])
         assert Path("/asdqwe/dir/d").is_dir()
         assert Path("/asdqwe/dir/f").is_file()
     finally:
@@ -167,13 +165,11 @@ def test_exec_succ_pod(tmpdir):
     "cmd,should_fail",
     (
         (["ls", "/hauskrecht"], True),
-        (["ls /hauskrecht"], True),
         (["ls", "/haus*ht"], True),
-        (["ls /etc/passwd"], False),
-        (["ls", "/etc/*wd"], False),
-        (["ls /etc/*wd"], False),
-        (["bash -c 'ls /etc/passwd'"], False),
-        (["bash -c 'ls /etc/*wd'"], False),
+        (["ls", "/etc/*wd"], True),
+        (["ls", "/etc/passwd"], False),
+        (["bash", "-c", "ls /etc/passwd"], False),
+        (["bash", "-c", "ls /etc/*wd"], False),
     ),
 )
 def test_md_exec(tmpdir, cmd, should_fail):
@@ -239,7 +235,7 @@ def test_file_got_changed(tmpdir):
     )
     o.run()
     try:
-        o.exec(command=["echo '\nHello, Tony Stark!' >>./qwe"])
+        o.exec(command=["bash", "-c", "echo '\nHello, Tony Stark!' >>./qwe"])
         assert "Hello, Tony!\nHello, Tony Stark!\n" == p.read_text()
     finally:
         o.delete_pod()
@@ -272,7 +268,7 @@ def test_md_e2e(tmpdir, git_url, branch):
         o.exec(command=["packit", "--help"])
 
         with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["echo 'I quit!'; exit 120"])
+            o.exec(command=["bash", "-c", "echo 'I quit!'; exit 120"])
         e = ex.value
         assert "I quit!" in e.output
         assert 120 == e.rc
@@ -308,6 +304,8 @@ def test_md_new_namespace(tmpdir):
             o.exec(command=["ls", "-lha", "./dir/file"])
             assert d.joinpath("file").read_text() == "asd"
             cmd = [
+                "bash",
+                "-c",
                 "curl -skL https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT/metrics",
             ]
             out = o.exec(command=cmd)
