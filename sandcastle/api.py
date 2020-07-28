@@ -45,15 +45,16 @@ We came up with these solutions:
 import json
 import logging
 import os
+import shlex
 import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
 
 from kubernetes import config, client
-from kubernetes import stream
 from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
+from kubernetes import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import (
@@ -462,9 +463,7 @@ class Sandcastle(object):
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
         :return: (path to the sync'd dir within sandbox, path to the script within sandbox)
         """
-        # we don't need to quote this since it's gonna be exec'd in shell directly
-        # it's actually bad to quote since *, $(), ``, ... won't get expanded
-        cmd_str = " ".join(command)
+        cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
         # this is where the content of mapped_dir will be
@@ -474,10 +473,8 @@ class Sandcastle(object):
 
         # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         # set -e - fail the script when a command fails
-        # set -o pipefail - fail when one command in a pipeline fails, hence we no longer need exec
-        script_template = (
-            f"#!/bin/bash\nset -e -o pipefail\ncd {unique_dir}\n{cmd_str}\n"
-        )
+        script_template = f"#!/bin/bash\nset -e\ncd {unique_dir}\nexec {cmd_str}\n"
+        logger.debug("mapped dir command: %r", script_template)
         with tempfile.TemporaryDirectory() as tmpdir:
             t = Path(tmpdir)
             local_script_path = t.joinpath(script_name)
@@ -507,9 +504,6 @@ class Sandcastle(object):
             )
             command = ["bash", str(target_script_path)]
             self._copy_path_to_pod(self.mapped_dir.local_dir, Path(unique_dir))
-        else:
-            # make sure we invoke in bash
-            command = ["bash", "-c", " ".join(command)]
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         # FIXME: refactor this junk into a dedicated function, ideally to _do_exec
