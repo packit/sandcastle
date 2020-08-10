@@ -36,6 +36,7 @@
           - python3-polib # anaconda
           - rust # needed for rust-based projects
           - cargo #
+          - rubygems # https://github.com/packit/packit-service/issues/771
         state: present
         install_weak_deps: no # on F30 python2 pulls in unwanted python-unversioned-command
       tags:
