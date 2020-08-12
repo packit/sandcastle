@@ -51,10 +51,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
 
-from kubernetes import config, client
+from kubernetes import config, client, stream
 from kubernetes.client import V1DeleteOptions, V1Pod
 from kubernetes.client.rest import ApiException
-from kubernetes import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import (
@@ -83,7 +82,12 @@ class MappedDir:
     Copy local directory to the pod using `oc cp`
     """
 
-    def __init__(self, local_dir: str, path: str, with_interim_pvc: bool = True):
+    def __init__(
+        self,
+        local_dir: Union[Path, str],
+        path: Union[Path, str],
+        with_interim_pvc: bool = True,
+    ):
         """
         :param local_dir: path within the sandbox where the directory should be copied
         :param path: copy this local directory to sandbox (using `oc cp`)
@@ -102,7 +106,11 @@ class VolumeSpec:
     """
 
     def __init__(
-        self, path: str, volume_name: str = "", pvc: str = "", pvc_from_env: str = ""
+        self,
+        path: Union[Path, str],
+        volume_name: str = "",
+        pvc: str = "",
+        pvc_from_env: str = "",
     ):
         """
         :param path: path within the sandbox where the volume is meant to be mounted

@@ -44,7 +44,7 @@ class PVC:
         self.storage_size = storage_size
 
     def to_dict(self):
-        pvc_dict = {
+        return {
             "kind": "PersistentVolumeClaim",
             "spec": {
                 "accessModes": self.access_modes,
@@ -53,4 +53,3 @@ class PVC:
             "apiVersion": "v1",
             "metadata": {"name": self.claim_name},
         }
-        return pvc_dict
