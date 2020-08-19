@@ -108,9 +108,9 @@ def test_exec(cmd, should_fail):
     "KUBERNETES_SERVICE_HOST" not in os.environ,
     reason="Not running in a pod, skipping.",
 )
-def test_dir_sync(tmpdir):
+def test_dir_sync(tmp_path):
     p = Path("/asdqwe")
-    vs = VolumeSpec(path=str(p), pvc_from_env="SANDCASTLE_PVC")
+    vs = VolumeSpec(path=p, pvc_from_env="SANDCASTLE_PVC")
 
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, volume_mounts=[vs]
@@ -134,7 +134,7 @@ def test_dir_sync(tmpdir):
     "KUBERNETES_SERVICE_HOST" not in os.environ,
     reason="Not running in a pod, skipping.",
 )
-def test_pod_sa_not_in_sandbox(tmpdir):
+def test_pod_sa_not_in_sandbox(tmp_path):
     o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     sa_path = "/var/run/secrets/kubernetes.io/serviceaccount"
     with pytest.raises(SandcastleCommandFailed) as e:
@@ -149,7 +149,7 @@ def test_pod_sa_not_in_sandbox(tmpdir):
         o.delete_pod()
 
 
-def test_exec_succ_pod(tmpdir):
+def test_exec_succ_pod(tmp_path):
     o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     # we mimic here that the pod has finished and we are still running commands inside
     o.run(command=["true"])
@@ -172,15 +172,14 @@ def test_exec_succ_pod(tmpdir):
         (["bash", "-c", "ls /etc/*wd"], False),
     ),
 )
-def test_md_exec(tmpdir, cmd, should_fail):
+def test_md_exec(tmp_path, cmd, should_fail):
     """
     make sure commands are exec'd properly in the sandbox with mapped dirs
     this is what we use in p-s with RW vols
     """
-    p = Path(tmpdir)
     # something needs to be inside
-    p.joinpath("dummy.file").write_text("something")
-    m_dir = MappedDir(str(p), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+    tmp_path.joinpath("dummy.file").write_text("something")
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
@@ -203,11 +202,10 @@ def test_md_exec(tmpdir, cmd, should_fail):
         o.delete_pod()
 
 
-def test_md_multiple_exec(tmpdir):
-    p = Path(tmpdir)
-    p.joinpath("stark").mkdir()
-    p.joinpath("qwe").write_text("Hello, Tony!")
-    m_dir = MappedDir(str(p), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+def test_md_multiple_exec(tmp_path):
+    tmp_path.joinpath("stark").mkdir()
+    tmp_path.joinpath("qwe").write_text("Hello, Tony!")
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
@@ -217,17 +215,17 @@ def test_md_multiple_exec(tmpdir):
         out = o.exec(command=["ls", "./qwe"])
         assert "qwe" in out
         o.exec(command=["touch", "./stark/asd"])
-        assert p.joinpath("stark/asd").is_file()
+        assert tmp_path.joinpath("stark/asd").is_file()
         o.exec(command=["touch", "./zxc"])
-        assert p.joinpath("zxc").is_file()
+        assert tmp_path.joinpath("zxc").is_file()
     finally:
         o.delete_pod()
 
 
-def test_file_got_changed(tmpdir):
-    m_dir = MappedDir(str(tmpdir), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+def test_file_got_changed(tmp_path):
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
-    p = Path(m_dir.local_dir).joinpath("qwe")
+    p = m_dir.local_dir.joinpath("qwe")
     p.write_text("Hello, Tony!")
 
     o = Sandcastle(
@@ -248,13 +246,13 @@ def test_file_got_changed(tmpdir):
         ("https://github.com/packit-service/ogr.git", "master"),
     ),
 )
-def test_md_e2e(tmpdir, git_url, branch):
+def test_md_e2e(tmp_path, git_url, branch):
     # running in k8s
     if "KUBERNETES_SERVICE_HOST" in os.environ:
-        t = Path(SANDCASTLE_MOUNTPOINT).joinpath(f"clone-{get_timestamp_now()}")
+        t = Path(SANDCASTLE_MOUNTPOINT, f"clone-{get_timestamp_now()}")
     else:
-        t = Path(tmpdir)
-    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+        t = tmp_path
+    m_dir = MappedDir(t, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
     run_command(["git", "clone", "-b", branch, git_url, t])
 
@@ -277,11 +275,10 @@ def test_md_e2e(tmpdir, git_url, branch):
         o.delete_pod()
 
 
-def test_md_new_namespace(tmpdir):
-    t = Path(tmpdir)
-    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+def test_md_new_namespace(tmp_path):
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
-    d = t.joinpath("dir")
+    d = tmp_path.joinpath("dir")
     d.mkdir()
     d.joinpath("file").write_text("asd")
 
@@ -324,17 +321,14 @@ def test_md_new_namespace(tmpdir):
 # tar: lost+found: Cannot utime: Operation not permitted
 # tar: lost+found: Cannot change mode to rwxr-sr-x: Operation not permitted
 # tar: Exiting with failure status due to previous errors
-def test_lost_found_is_ignored(tmpdir):
-    t = Path(tmpdir)
-    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT)
-
-    lf = t.joinpath("lost+found")
-    lf.mkdir()
-    t.joinpath("file").write_text("asd")
-
+def test_lost_found_is_ignored(tmp_path):
+    tmp_path.joinpath("lost+found").mkdir()
+    tmp_path.joinpath("file").write_text("asd")
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT)
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
     )
+
     o.run()
     try:
         o.exec(command=["ls", "-lha", "./"])
@@ -345,13 +339,13 @@ def test_lost_found_is_ignored(tmpdir):
         o.delete_pod()
 
 
-def test_changing_mode(tmpdir):
+def test_changing_mode(tmp_path):
     # running in k8s
     if "KUBERNETES_SERVICE_HOST" in os.environ:
         t = Path(SANDCASTLE_MOUNTPOINT)
     else:
-        t = Path(tmpdir)
-    m_dir = MappedDir(str(t), SANDCASTLE_MOUNTPOINT)
+        t = tmp_path
+    m_dir = MappedDir(t, SANDCASTLE_MOUNTPOINT)
 
     fi = t.joinpath("file")
     fi.write_text("asd")
