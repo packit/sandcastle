@@ -5,6 +5,7 @@
     - name: Install basic utilities which should be in a sandbox.
       dnf:
         name:
+          - rsync # oc rsync worker:/sandcastle <-> sandcastle-pod
           - make
           - git-core
           - packit
