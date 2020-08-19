@@ -475,21 +475,20 @@ class Sandcastle(object):
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
         # this is where the content of mapped_dir will be
-        unique_dir = root_target_dir.joinpath(self.pod_name)
+        unique_dir = root_target_dir / self.pod_name
         script_name = "script.sh"
-        target_script_path = root_target_dir.joinpath(script_name)
 
         # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         # set -e - fail the script when a command fails
         script_template = f"#!/bin/bash\nset -e\ncd {unique_dir}\nexec {cmd_str}\n"
         logger.debug("mapped dir command: %r", script_template)
         with tempfile.TemporaryDirectory() as tmpdir:
-            t = Path(tmpdir)
-            local_script_path = t.joinpath(script_name)
+            local_script_path = Path(tmpdir, script_name)
             local_script_path.write_text(script_template)
-            self._do_exec(["mkdir", "-p", str(unique_dir)]).strip()
-            self._copy_path_to_pod(local_script_path, root_target_dir)
-            return unique_dir, target_script_path
+            # no_perms: rsync fails trying to update root_target_dir permissions
+            self._copy_path_to_pod(local_script_path, root_target_dir, no_perms=True)
+        target_script_path = root_target_dir / script_name
+        return unique_dir, target_script_path
 
     def exec(self, command: List[str]) -> str:
         """
@@ -560,17 +559,20 @@ class Sandcastle(object):
         logger.debug("exec response = %r" % response)
         return response
 
-    def _copy_path_to_pod(self, local_path: Path, pod_dir: Path):
+    def _copy_path_to_pod(
+        self, local_path: Path, pod_dir: Path, no_perms: bool = False
+    ):
         """
         copy local_path (dir or file) inside pod
 
         :param local_path: path to a local file or a dir
         :param pod_dir: Directory within the pod where the content of local_path is extracted
+        :param no_perms: If true, do not transfer permissions
 
         https://www.openshift.com/blog/transferring-files-in-and-out-of-containers-in-openshift-part-1-manually-copying-files
         """
         if local_path.is_dir():
-            exclude = "--exclude=lost+found"  # not needed
+            exclude = "--exclude=lost+found"  # can't touch that
             include = "--include=[]"  # default
         elif local_path.is_file():
             exclude = "--exclude=*"  # everything
@@ -579,18 +581,19 @@ class Sandcastle(object):
         else:
             raise SandcastleException(f"{local_path} is neither a dir nor a file")
 
-        run_command(
-            [
-                "oc",
-                "rsync",
-                exclude,
-                include,
-                "--progress=true",
-                f"--namespace={self.k8s_namespace_name}",
-                f"{local_path}/",  # ??? rsync doesn't work without the trailing /
-                f"{self.pod_name}:{pod_dir}",
-            ]
-        )
+        cmd = [
+            "oc",
+            "rsync",
+            exclude,
+            include,
+            "--progress=true",
+            f"--namespace={self.k8s_namespace_name}",
+            f"{local_path}/",  # ??? rsync doesn't work without the trailing /
+            f"{self.pod_name}:{pod_dir}",
+        ]
+        if no_perms:
+            cmd += ["--no-perms"]
+        run_command(cmd)
 
     def _copy_path_from_pod(self, local_dir: Path, pod_dir: Path):
         """
