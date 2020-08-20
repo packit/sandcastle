@@ -67,7 +67,6 @@ from sandcastle.utils import (
     get_timestamp_now,
     clean_string,
     run_command,
-    purge_dir_content,
 )
 
 logger = logging.getLogger(__name__)
@@ -597,66 +596,22 @@ class Sandcastle(object):
 
     def _copy_path_from_pod(self, local_dir: Path, pod_dir: Path):
         """
-        copy content of a dir from pod locally
+        copy content of a dir from pod to local dir
 
         :param local_dir: path to the local dir
         :param pod_dir: path within the pod
         """
-        remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
-        try:
-            remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
-            grc = (
-                rf"cd {pod_dir} && ls -d -1 .* * | egrep -v '^\.$' | egrep -v '^\.\.$'"
-            )
-            tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
-            pack_cmd = ["bash", "-c", tar_cmd]
-            output = self._do_exec(pack_cmd)
-            if output:
-                logger.debug(f"output from tar -czf: {output!r}")
-            # let's make sure the archive is present
-            output = self._do_exec(["ls", "-lh", str(remote_tar_path)])
-            logger.debug(f"the archive in the pod: {output!r}")
-
-            # Copy /tmp/foo from a remote pod to /tmp/bar locally
-            #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
-            target = f"{self.k8s_namespace_name}/{self.pod_name}:{remote_tar_path}"
-            fd, tmp_tarball_path = tempfile.mkstemp()
-            try:
-                os.close(fd)
-
-                count = 3
-                while True:
-                    try:
-                        run_command(["oc", "cp", target, tmp_tarball_path])
-                        break
-                    except Exception as ex:
-                        # this is where all the fun happens - we have confirmed the archive
-                        # is inside, but oc failed to copy it - why?
-                        # let's look again what's inside and try again
-                        logger.warning(f"Unable to copy data from the sandbox: {ex!r}")
-                        output = self._do_exec(
-                            ["ls", "-lh", str(remote_tar_path.parent)]
-                        )
-                        logger.info(f"files in the pod: {output!r}")
-                        count -= 1
-                        if count < 0:
-                            raise
-
-                purge_dir_content(local_dir)
-
-                unpack_cmd = [
-                    "tar",
-                    "--preserve-permissions",
-                    "-xzf",
-                    tmp_tarball_path,
-                    "-C",
-                    str(local_dir),
-                ]
-                run_command(unpack_cmd)
-            finally:
-                os.unlink(tmp_tarball_path)
-        finally:
-            self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
+        run_command(
+            [
+                "oc",
+                "rsync",
+                "--delete",  # delete files in local_dir which are not in pod_dir
+                "--progress=true",
+                f"--namespace={self.k8s_namespace_name}",
+                f"{self.pod_name}:{pod_dir}/",  # trailing / to copy only content of dir
+                f"{local_dir}",
+            ]
+        )
 
     def _copy_mdir_from_pod(self, unique_dir: Path):
         """ process mapped_dir after we are done execing """
