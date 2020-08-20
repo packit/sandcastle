@@ -67,7 +67,6 @@ from sandcastle.utils import (
     get_timestamp_now,
     clean_string,
     run_command,
-    purge_dir_content,
 )
 
 logger = logging.getLogger(__name__)
@@ -475,21 +474,20 @@ class Sandcastle(object):
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
         # this is where the content of mapped_dir will be
-        unique_dir = root_target_dir.joinpath(self.pod_name)
+        unique_dir = root_target_dir / self.pod_name
         script_name = "script.sh"
-        target_script_path = root_target_dir.joinpath(script_name)
 
         # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         # set -e - fail the script when a command fails
         script_template = f"#!/bin/bash\nset -e\ncd {unique_dir}\nexec {cmd_str}\n"
         logger.debug("mapped dir command: %r", script_template)
         with tempfile.TemporaryDirectory() as tmpdir:
-            t = Path(tmpdir)
-            local_script_path = t.joinpath(script_name)
+            local_script_path = Path(tmpdir, script_name)
             local_script_path.write_text(script_template)
-            self._do_exec(["mkdir", "-p", str(unique_dir)]).strip()
-            self._copy_path_to_pod(local_script_path, root_target_dir)
-            return unique_dir, target_script_path
+            # no_perms: rsync fails trying to update root_target_dir permissions
+            self._copy_path_to_pod(local_script_path, root_target_dir, no_perms=True)
+        target_script_path = root_target_dir / script_name
+        return unique_dir, target_script_path
 
     def exec(self, command: List[str]) -> str:
         """
@@ -511,7 +509,7 @@ class Sandcastle(object):
                 command, target_dir=Path(self.mapped_dir.path)
             )
             command = ["bash", str(target_script_path)]
-            self._copy_path_to_pod(self.mapped_dir.local_dir, Path(unique_dir))
+            self._copy_path_to_pod(self.mapped_dir.local_dir, unique_dir)
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823
         # FIXME: refactor this junk into a dedicated function, ideally to _do_exec
@@ -560,119 +558,60 @@ class Sandcastle(object):
         logger.debug("exec response = %r" % response)
         return response
 
-    def _copy_path_to_pod(self, local_path: Path, pod_dir: Path):
+    def _copy_path_to_pod(
+        self, local_path: Path, pod_dir: Path, no_perms: bool = False
+    ):
         """
         copy local_path (dir or file) inside pod
 
         :param local_path: path to a local file or a dir
         :param pod_dir: Directory within the pod where the content of local_path is extracted
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_tarball_dir = Path(tmpdir)
-            tmp_tarball_path = tmp_tarball_dir.joinpath("t.tar.gz")
-            cmd = ["tar", "--preserve-permissions", "-czf", tmp_tarball_path]
+        :param no_perms: If true, do not transfer permissions
 
-            working_dir = local_path
-            if local_path.is_file():
-                items = [local_path]
-                working_dir = local_path.parent
-            else:
-                # this has to be list, because mypy:
-                #   Incompatible types in assignment (expression has type
-                #     "Generator[Path, None, None]", variable has type "List[Path]")
-                items = list(local_path.iterdir())
-            # tar: lost+found: Cannot utime: Operation not permitted
-            # list comprehension no likey mypy
-            for x in items:
-                if x.name == "lost+found":
-                    continue
-                cmd.append(str(x.relative_to(working_dir)))
-            run_command(cmd, cwd=working_dir)
-            remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
-            try:
-                remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
-                # Copy /tmp/foo local file to /tmp/bar
-                # in a remote pod in namespace <some-namespace>:
-                #   oc cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar
-                target = f"{self.k8s_namespace_name}/{self.pod_name}:{remote_tmp_dir}"
-                # if you're interested: the way openshift does this is that
-                # it creates a tarball locally
-                # and streams it via exec into the container to a pod process
-                run_command(["oc", "cp", tmp_tarball_path, target])
-                unpack_cmd = [
-                    "tar",
-                    "--preserve-permissions",
-                    "-xzf",
-                    str(remote_tar_path),
-                    "-C",
-                    str(pod_dir),
-                ]
-                self._do_exec(unpack_cmd)
-            finally:
-                self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
+        https://www.openshift.com/blog/transferring-files-in-and-out-of-containers-in-openshift-part-1-manually-copying-files
+        """
+        if local_path.is_dir():
+            exclude = "--exclude=lost+found"  # can't touch that
+            include = "--include=[]"  # default
+        elif local_path.is_file():
+            exclude = "--exclude=*"  # everything
+            include = f"--include={local_path.name}"  # only the file
+            local_path = local_path.parent
+        else:
+            raise SandcastleException(f"{local_path} is neither a dir nor a file")
+
+        cmd = [
+            "oc",
+            "rsync",
+            exclude,
+            include,
+            "--progress=true",
+            f"--namespace={self.k8s_namespace_name}",
+            f"{local_path}/",  # ??? rsync doesn't work without the trailing /
+            f"{self.pod_name}:{pod_dir}",
+        ]
+        if no_perms:
+            cmd += ["--no-perms"]
+        run_command(cmd)
 
     def _copy_path_from_pod(self, local_dir: Path, pod_dir: Path):
         """
-        copy content of a dir from pod locally
+        copy content of a dir from pod to local dir
 
         :param local_dir: path to the local dir
         :param pod_dir: path within the pod
         """
-        remote_tmp_dir = Path(self._do_exec(["mktemp", "-d"]).strip())
-        try:
-            remote_tar_path = remote_tmp_dir.joinpath("t.tar.gz")
-            grc = (
-                rf"cd {pod_dir} && ls -d -1 .* * | egrep -v '^\.$' | egrep -v '^\.\.$'"
-            )
-            tar_cmd = f"tar -czf {remote_tar_path} -C {pod_dir} $({grc})"
-            pack_cmd = ["bash", "-c", tar_cmd]
-            output = self._do_exec(pack_cmd)
-            if output:
-                logger.debug(f"output from tar -czf: {output!r}")
-            # let's make sure the archive is present
-            output = self._do_exec(["ls", "-lh", str(remote_tar_path)])
-            logger.debug(f"the archive in the pod: {output!r}")
-
-            # Copy /tmp/foo from a remote pod to /tmp/bar locally
-            #   oc cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar
-            target = f"{self.k8s_namespace_name}/{self.pod_name}:{remote_tar_path}"
-            fd, tmp_tarball_path = tempfile.mkstemp()
-            try:
-                os.close(fd)
-
-                count = 3
-                while True:
-                    try:
-                        run_command(["oc", "cp", target, tmp_tarball_path])
-                        break
-                    except Exception as ex:
-                        # this is where all the fun happens - we have confirmed the archive
-                        # is inside, but oc failed to copy it - why?
-                        # let's look again what's inside and try again
-                        logger.warning(f"Unable to copy data from the sandbox: {ex!r}")
-                        output = self._do_exec(
-                            ["ls", "-lh", str(remote_tar_path.parent)]
-                        )
-                        logger.info(f"files in the pod: {output!r}")
-                        count -= 1
-                        if count < 0:
-                            raise
-
-                purge_dir_content(local_dir)
-
-                unpack_cmd = [
-                    "tar",
-                    "--preserve-permissions",
-                    "-xzf",
-                    tmp_tarball_path,
-                    "-C",
-                    str(local_dir),
-                ]
-                run_command(unpack_cmd)
-            finally:
-                os.unlink(tmp_tarball_path)
-        finally:
-            self._do_exec(["rm", "-rf", str(remote_tmp_dir)])
+        run_command(
+            [
+                "oc",
+                "rsync",
+                "--delete",  # delete files in local_dir which are not in pod_dir
+                "--progress=true",
+                f"--namespace={self.k8s_namespace_name}",
+                f"{self.pod_name}:{pod_dir}/",  # trailing / to copy only content of dir
+                f"{local_dir}",
+            ]
+        )
 
     def _copy_mdir_from_pod(self, unique_dir: Path):
         """ process mapped_dir after we are done execing """

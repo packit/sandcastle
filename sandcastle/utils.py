@@ -23,9 +23,7 @@ import datetime
 import logging
 import os
 import shlex
-import shutil
 import subprocess
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -125,17 +123,3 @@ def clean_string(s: str) -> str:
         .replace(".", "-")
         .replace("--", "-")[-63:]
     )
-
-
-def purge_dir_content(di: Path):
-    """ remove everything in the dir but not the dir itself """
-    dir_items = list(di.iterdir())
-    if dir_items:
-        logger.info(f"dir {di} is not empty")
-        logger.debug("content: %s" % [i.name for i in dir_items])
-    for item in dir_items:
-        # symlink pointing to a dir is also a dir and a symlink
-        if item.is_file() or item.is_symlink():
-            item.unlink()
-        else:
-            shutil.rmtree(item)
