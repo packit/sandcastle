@@ -3,6 +3,23 @@
     check:
       jobs:
         - pre-commit
+        - tests
     gate:
       jobs:
         - pre-commit
+
+- job:
+    name: tests
+    parent: base
+    attempts: 1
+    description: Deploy a cluster and run tests
+    pre-run:
+      - files/install-openshift.yaml
+    extra-vars:
+      with_testing: true
+      ansible_python_interpreter: /usr/bin/python3
+    nodeset:
+      nodes:
+        - name: test-node
+          label: cloud-fedora-30
+    run: files/zuul-tests.yaml

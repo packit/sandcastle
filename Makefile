@@ -8,7 +8,7 @@ test-image-build: build
 	docker build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
 
 check:
-	pytest-3 --showlocals -vv $(TEST_TARGET)
+	pytest-3 --color=yes --showlocals -vv $(TEST_TARGET)
 
 build:
 	docker build --tag ${IMAGE_NAME} .
