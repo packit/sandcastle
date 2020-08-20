@@ -23,6 +23,7 @@ import json
 import os
 import time
 from pathlib import Path
+from shutil import rmtree
 
 import pytest
 from flexmock import flexmock
@@ -37,13 +38,26 @@ from sandcastle import (
     SandcastleException,
 )
 from sandcastle.exceptions import SandcastleCommandFailed
-from sandcastle.utils import run_command, get_timestamp_now, purge_dir_content
+from sandcastle.utils import run_command, get_timestamp_now
 from tests.conftest import (
     SANDBOX_IMAGE,
     NAMESPACE,
     run_test_within_pod,
     SANDCASTLE_MOUNTPOINT,
 )
+
+
+def purge_dir_content(di: Path):
+    """ remove everything in the dir but not the dir itself """
+    dir_items = list(di.iterdir())
+    if dir_items:
+        print(f"Removing {di} content: {[i.name for i in dir_items]}")
+    for item in dir_items:
+        # symlink pointing to a dir is also a dir and a symlink
+        if item.is_file() or item.is_symlink():
+            item.unlink()
+        else:
+            rmtree(item)
 
 
 def test_basic_e2e_inside():
