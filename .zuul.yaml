@@ -3,13 +3,14 @@
     check:
       jobs:
         - pre-commit
-        - tests
+        - sandcastle-tests
     gate:
       jobs:
         - pre-commit
 
 - job:
-    name: tests
+    # job names are global, this should be unique
+    name: sandcastle-tests
     parent: base
     attempts: 1
     description: Deploy a cluster and run tests
