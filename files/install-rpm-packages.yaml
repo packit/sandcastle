@@ -38,6 +38,13 @@
           - rust # needed for rust-based projects
           - cargo #
           - rubygems # https://github.com/packit/packit-service/issues/771
+          # these are for anaconda
+          - gobject-introspection-devel
+          - glade-devel
+          - libxklavier-devel
+          - libarchive-devel
+          - rpm-devel
+          - audit-libs-devel
         state: present
         install_weak_deps: no # on F30 python2 pulls in unwanted python-unversioned-command
       tags:
