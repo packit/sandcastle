@@ -585,7 +585,7 @@ class Sandcastle(object):
             "rsync",
             exclude,
             include,
-            "--progress=true",
+            "--quiet=true",  # avoid huge logs
             f"--namespace={self.k8s_namespace_name}",
             f"{local_path}/",  # ??? rsync doesn't work without the trailing /
             f"{self.pod_name}:{pod_dir}",
@@ -606,7 +606,7 @@ class Sandcastle(object):
                 "oc",
                 "rsync",
                 "--delete",  # delete files in local_dir which are not in pod_dir
-                "--progress=true",
+                "--quiet=true",  # avoid huge logs
                 f"--namespace={self.k8s_namespace_name}",
                 f"{self.pod_name}:{pod_dir}/",  # trailing / to copy only content of dir
                 f"{local_dir}",
