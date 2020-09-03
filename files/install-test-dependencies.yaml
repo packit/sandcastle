@@ -1,0 +1,17 @@
+---
+- name: Install test dependencies
+  hosts: all
+  tasks:
+    - name: pip install kubernetes<9
+      pip:
+        name:
+          - kubernetes<9
+        executable: pip3
+      become: true
+    - name: dnf install pytest & flexmock
+      dnf:
+        name:
+          - python3-pytest
+          - python3-flexmock
+        state: present
+      become: true

@@ -1,0 +1,8 @@
+---
+- name: Setup Openshift cluster
+  hosts: all
+  tasks:
+    # https://github.com/packit-service/sandcastle#developing-sandcastle
+    - name: Add permissions for service account
+      command: oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
+      become: true
