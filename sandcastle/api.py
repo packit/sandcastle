@@ -179,8 +179,8 @@ class Sandcastle(object):
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
             "resources": {
-                "limits": {"memory": "512Mi"},
-                "requests": {"memory": "512Mi"},
+                "limits": {"memory": "256Mi"},
+                "requests": {"memory": "256Mi"},
             },
         }
         spec = {
