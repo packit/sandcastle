@@ -45,7 +45,6 @@
           - rpm-devel
           - audit-libs-devel
         state: present
-        install_weak_deps: no # on F30 python2 pulls in unwanted python-unversioned-command
       tags:
         - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
