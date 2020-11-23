@@ -2,11 +2,10 @@
 # The expectation is to create sandbox pods from this one.
 FROM docker.io/usercont/sandcastle
 
-COPY tests/requirements.txt /src/tests/requirements.txt
-# Install packages first and reuse the cache as much as possible
-RUN cd /src/ \
-    && ansible-playbook -vv -c local -t with-sandcastle-deps -i localhost, files/install-rpm-packages.yaml
+COPY tests/requirements.txt ./tests/
+RUN ansible-playbook -vv -c local -t with-sandcastle-deps -i localhost, install-rpm-packages.yaml \
+    && dnf clean all
 
-COPY . /src/
+COPY . ./
 
 CMD ["make", "check"]
