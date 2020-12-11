@@ -21,13 +21,15 @@
 # SOFTWARE.
 import time
 from pathlib import Path
+from subprocess import check_output
 from typing import Optional, Any, Dict
 
 import pytest
 import urllib3
-from kubernetes import config, client
+from kubernetes import client
 from kubernetes.client import V1DeleteOptions
 from kubernetes.client.rest import ApiException
+from kubernetes.config import new_client_from_config
 
 from sandcastle.api import Sandcastle
 from sandcastle.utils import run_command, get_timestamp_now, clean_string
@@ -35,7 +37,8 @@ from sandcastle.utils import run_command, get_timestamp_now, clean_string
 NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
 SANDBOX_IMAGE = "docker.io/usercont/sandcastle"
-TEST_IMAGE_NAME = "docker.io/usercont/sandcastle-tests"
+TEST_IMAGE_BASENAME = "sandcastle-tests"
+TEST_IMAGE_NAME = f"docker.io/usercont/{TEST_IMAGE_BASENAME}"
 NAMESPACE = "myproject"
 SANDCASTLE_MOUNTPOINT = "/sandcastle"
 
@@ -66,6 +69,11 @@ def build_now():
     )
 
 
+def enable_user_access_namespace(user: str, namespace: str):
+    c = ["oc", "adm", "-n", namespace, "policy", "add-role-to-user", "edit", user]
+    run_command(c)
+
+
 # TODO: refactor into a class
 def run_test_within_pod(
     test_path: str, with_pv_at: Optional[str] = None, new_namespace: bool = False
@@ -77,21 +85,34 @@ def run_test_within_pod(
     :param with_pv_at: path to PV within the pod
     :param new_namespace: create new namespace and pass it via env var
     """
-    config.load_kube_config()
-    configuration = client.Configuration()
-    assert configuration.api_key
-    api = client.CoreV1Api(client.ApiClient(configuration))
+    # this will connect to the cluster you have active right now - see `oc status`
+    current_context = check_output(["oc", "config", "current-context"]).strip().decode()
+    api_client = new_client_from_config(context=current_context)
+    api = client.CoreV1Api(api_client)
+
+    # you need this for minishift; or do `eval $(minishift docker-env) && make build`
+    # # FIXME: get this from env or cli (`minishift openshift registry`)
+    # also it doesn't work for me right now, unable to reach minishift's docker registry
+    # registry = "172.30.1.1:5000"
+    # openshift_image_name = f"{registry}/myproject/{TEST_IMAGE_BASENAME}"
+    # # {'authorization': 'Bearer pRW5rGmqgBREnCeVweLcHbEhXvluvG1cImWfIrxWJ2A'}
+    # api_token = list(api_client.configuration.api_key.values())[0].split(" ")[1]
+    # check_call(["docker", "login", "-u", "developer", "-p", api_token, registry])
+    # check_call(["docker", "tag", TEST_IMAGE_NAME, openshift_image_name])
+    # check_call(["docker", "push", openshift_image_name])
 
     pod_name = f"test-orchestrator-{get_timestamp_now()}"
 
     cont_cmd = [
         "bash",
         "-c",
-        "ls -lha " f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
+        "~/setup_env_in_openshift.sh "
+        "&& ls -lha && pwd && id "
+        f"&& pytest-3 -vv -l -p no:cacheprovider {test_path}",
     ]
 
     container: Dict[str, Any] = {
-        "image": TEST_IMAGE_NAME,
+        "image": TEST_IMAGE_NAME,  # make sure this is correct
         "name": pod_name,
         "tty": True,  # corols
         "command": cont_cmd,
@@ -99,22 +120,14 @@ def run_test_within_pod(
         "env": [],
     }
 
+    user = f"system:serviceaccount:{NAMESPACE}:default"
+    enable_user_access_namespace(user, NAMESPACE)
     test_namespace = None
     if new_namespace:
         test_namespace = f"sandcastle-tests-{get_timestamp_now()}"
         c = ["oc", "new-project", test_namespace]
         run_command(c)
-        c = [
-            "oc",
-            "adm",
-            "-n",
-            test_namespace,
-            "policy",
-            "add-role-to-user",
-            "edit",
-            f"system:serviceaccount:{NAMESPACE}:default",
-        ]
-        run_command(c)
+        enable_user_access_namespace(user, test_namespace)
         container["env"] += [
             {"name": "SANDCASTLE_TESTS_NAMESPACE", "value": test_namespace}
         ]
