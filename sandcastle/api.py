@@ -255,14 +255,20 @@ class Sandcastle(object):
         load service account identity, otherwise load kubeconfig
         """
         logger.debug("Initialize kubernetes client")
+        configuration = client.Configuration()
         if "KUBERNETES_SERVICE_HOST" in os.environ:
             logger.info("loading incluster config")
-            config.load_incluster_config()
+            config.load_incluster_config(client_configuration=configuration)
         else:
             logger.info("loading kubeconfig")
-            config.load_kube_config()
-        configuration = client.Configuration()
-        assert configuration.api_key
+            config.load_kube_config(client_configuration=configuration)
+        if not configuration.api_key:
+            raise SandcastleException(
+                f"We loaded the kube config but can't access any cluster. "
+                "We have this configutation:\n"
+                f"Auth: {configuration.auth_settings()}\n"
+                f"Host: {configuration.get_host_settings()}\n"
+            )
         # example exec.py sets this:
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py#L61
         configuration.assert_hostname = False
