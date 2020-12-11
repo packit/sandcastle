@@ -263,12 +263,7 @@ class Sandcastle(object):
             logger.info("loading kubeconfig")
             config.load_kube_config(client_configuration=configuration)
         if not configuration.api_key:
-            raise SandcastleException(
-                f"We loaded the kube config but can't access any cluster. "
-                "We have this configutation:\n"
-                f"Auth: {configuration.auth_settings()}\n"
-                f"Host: {configuration.get_host_settings()}\n"
-            )
+            raise SandcastleException("No api_key, can't access any cluster.\n")
         # example exec.py sets this:
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py#L61
         configuration.assert_hostname = False
