@@ -19,3 +19,4 @@
     extra-vars:
       with_testing: true
     run: files/zuul-tests.yaml
+    timeout: 3660 # 1 hour
