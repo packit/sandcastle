@@ -74,6 +74,10 @@ def enable_user_access_namespace(user: str, namespace: str):
     run_command(c)
 
 
+def print_pod_logs(api: client.CoreV1Api, pod: str, namespace: str):
+    print(api.read_namespaced_pod_log(name=pod, namespace=namespace, follow=True))
+
+
 # TODO: refactor into a class
 def run_test_within_pod(
     test_path: str, with_pv_at: Optional[str] = None, new_namespace: bool = False
@@ -175,11 +179,12 @@ def run_test_within_pod(
             info = api.read_namespaced_pod(pod_name, NAMESPACE)
             if info.status.phase == "Running":
                 break
+            elif info.status.phase == "Failed":
+                print_pod_logs(api, pod_name, NAMESPACE)
+                raise RuntimeError("The pod failed to start.")
             time.sleep(2.0)
             counter -= 1
-        print(
-            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
-        )
+        print_pod_logs(api, pod_name, NAMESPACE)
         counter = 15
         while True:
             if counter < 0:
@@ -192,9 +197,7 @@ def run_test_within_pod(
             time.sleep(2.0)
             counter -= 1
     finally:
-        print(
-            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
-        )
+        print_pod_logs(api, pod_name, NAMESPACE)
         api.delete_namespaced_pod(pod_name, NAMESPACE, body=V1DeleteOptions())
         if new_namespace:
             run_command(["oc", "delete", "project", test_namespace])
