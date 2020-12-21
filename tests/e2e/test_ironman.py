@@ -414,7 +414,7 @@ def test_changing_mode(tmp_path):
         ("test_k8s_cli_init_fails", None),
     ),
 )
-def test_from_pod(build_now, test_name, kwargs):
+def test_from_pod(test_name, kwargs):
     """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
     path = f"tests/e2e/test_ironman.py::{test_name}"
     kwargs = kwargs or {}

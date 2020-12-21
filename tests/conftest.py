@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import time
-from pathlib import Path
 from subprocess import check_output
 from typing import Optional, Any, Dict
 
@@ -50,23 +49,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 @pytest.fixture()
 def init_openshift_deployer():
     return Sandcastle(image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME)
-
-
-@pytest.fixture(scope="session")
-def build_now():
-    """ build a container image with current sandcastle checkout """
-    project_root = Path(__file__).parent.parent
-    run_command(
-        [
-            "docker",
-            "build",
-            "-t",
-            TEST_IMAGE_NAME,
-            "-f",
-            "Dockerfile.tests",
-            str(project_root),
-        ]
-    )
 
 
 def enable_user_access_namespace(user: str, namespace: str):

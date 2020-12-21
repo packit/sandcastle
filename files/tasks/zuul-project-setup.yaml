@@ -14,3 +14,9 @@
   assert:
     that:
       - "src_path.stat.isdir"
+- name: check ~/.kube/config
+  stat:
+    path: ~/.kube/config
+  register: kube_config_stat
+- debug:
+    var: kube_config_stat

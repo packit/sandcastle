@@ -9,7 +9,7 @@
         chdir: "{{ project_dir }}"
       become: true
     - name: Run tests
-      command: make check
+      command: make check-in-container
       args:
         chdir: "{{ project_dir }}"
       become: true
