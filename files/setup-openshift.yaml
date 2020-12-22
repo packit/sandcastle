@@ -6,3 +6,11 @@
     - name: Add permissions for service account
       command: oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
       become: true
+    - name: grant everyone access to {{ item }} so we can use it inside test container
+      file:
+        path: "{{ item }}"
+        mode: "0775"
+      loop:
+        - "~/.kube"
+        - "~/.kube/config"
+      become: true

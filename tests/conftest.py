@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import time
-from pathlib import Path
 from subprocess import check_output
 from typing import Optional, Any, Dict
 
@@ -52,26 +51,13 @@ def init_openshift_deployer():
     return Sandcastle(image_reference=NON_EX_IMAGE, k8s_namespace_name=PROJECT_NAME)
 
 
-@pytest.fixture(scope="session")
-def build_now():
-    """ build a container image with current sandcastle checkout """
-    project_root = Path(__file__).parent.parent
-    run_command(
-        [
-            "docker",
-            "build",
-            "-t",
-            TEST_IMAGE_NAME,
-            "-f",
-            "Dockerfile.tests",
-            str(project_root),
-        ]
-    )
-
-
 def enable_user_access_namespace(user: str, namespace: str):
     c = ["oc", "adm", "-n", namespace, "policy", "add-role-to-user", "edit", user]
     run_command(c)
+
+
+def print_pod_logs(api: client.CoreV1Api, pod: str, namespace: str):
+    print(api.read_namespaced_pod_log(name=pod, namespace=namespace, follow=True))
 
 
 # TODO: refactor into a class
@@ -175,11 +161,12 @@ def run_test_within_pod(
             info = api.read_namespaced_pod(pod_name, NAMESPACE)
             if info.status.phase == "Running":
                 break
+            elif info.status.phase == "Failed":
+                print_pod_logs(api, pod_name, NAMESPACE)
+                raise RuntimeError("The pod failed to start.")
             time.sleep(2.0)
             counter -= 1
-        print(
-            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
-        )
+        print_pod_logs(api, pod_name, NAMESPACE)
         counter = 15
         while True:
             if counter < 0:
@@ -192,9 +179,7 @@ def run_test_within_pod(
             time.sleep(2.0)
             counter -= 1
     finally:
-        print(
-            api.read_namespaced_pod_log(name=pod_name, namespace=NAMESPACE, follow=True)
-        )
+        print_pod_logs(api, pod_name, NAMESPACE)
         api.delete_namespaced_pod(pod_name, NAMESPACE, body=V1DeleteOptions())
         if new_namespace:
             run_command(["oc", "delete", "project", test_namespace])

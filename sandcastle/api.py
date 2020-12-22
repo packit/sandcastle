@@ -51,9 +51,16 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Tuple
 
-from kubernetes import config, client, stream
-from kubernetes.client import V1DeleteOptions, V1Pod
+from kubernetes.client import (
+    V1DeleteOptions,
+    V1Pod,
+    Configuration,
+    CoreV1Api,
+    ApiClient,
+)
 from kubernetes.client.rest import ApiException
+from kubernetes.config import load_incluster_config, load_kube_config
+from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.exceptions import (
@@ -164,7 +171,7 @@ class Sandcastle(object):
         if working_dir and mapped_dir:
             logger.warning("Ignoring working_dir because mapped_dir is set.")
             self.working_dir = None
-        self.api: client.CoreV1Api = self.get_api_client()
+        self.api: CoreV1Api = self.get_api_client()
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
         self.mapped_dir: MappedDir = mapped_dir
         self.pvc: Optional[PVC] = None
@@ -249,26 +256,22 @@ class Sandcastle(object):
         ]
 
     @staticmethod
-    def get_api_client() -> client.CoreV1Api:
+    def get_api_client() -> CoreV1Api:
         """
         Obtain API client for kubenernetes; if running in a pod,
         load service account identity, otherwise load kubeconfig
         """
         logger.debug("Initialize kubernetes client")
-        configuration = client.Configuration()
+        configuration = Configuration()
         if "KUBERNETES_SERVICE_HOST" in os.environ:
             logger.info("loading incluster config")
-            config.load_incluster_config(client_configuration=configuration)
+            load_incluster_config(client_configuration=configuration)
         else:
             logger.info("loading kubeconfig")
-            config.load_kube_config(client_configuration=configuration)
+            load_kube_config(client_configuration=configuration)
         if not configuration.api_key:
             raise SandcastleException("No api_key, can't access any cluster.\n")
-        # example exec.py sets this:
-        # https://github.com/kubernetes-client/python/blob/master/examples/exec.py#L61
-        configuration.assert_hostname = False
-        client.Configuration.set_default(configuration)
-        return client.CoreV1Api()
+        return CoreV1Api(ApiClient(configuration=configuration))
 
     def get_pod(self) -> V1Pod:
         """
@@ -439,7 +442,7 @@ class Sandcastle(object):
     ) -> Union[WSClient, str]:
         for i in range(MAGIC_KONSTANT):
             try:
-                s = stream.stream(
+                s = stream(
                     self.api.connect_get_namespaced_pod_exec,
                     self.pod_name,
                     self.k8s_namespace_name,
