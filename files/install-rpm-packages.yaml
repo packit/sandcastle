@@ -61,8 +61,13 @@
           - origin-clients # oc cp
           - python3-pytest # tests
           - python3-flexmock
-          - python3-kubernetes
         state: present
+      tags:
+        - with-sandcastle-deps
+    - name: Install kubernetes client
+      pip:
+        executable: /usr/bin/pip3
+        name: kubernetes==12.0.1
       tags:
         - with-sandcastle-deps
     - name: Install tests requirements

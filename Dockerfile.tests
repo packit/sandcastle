@@ -3,6 +3,7 @@
 FROM docker.io/usercont/sandcastle
 
 COPY tests/requirements.txt ./tests/
+COPY .git setup.py setup.cfg ./
 RUN ansible-playbook -vv -c local -t with-sandcastle-deps -i localhost, install-rpm-packages.yaml \
     && dnf clean all
 
