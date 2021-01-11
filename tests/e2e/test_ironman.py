@@ -248,6 +248,20 @@ def test_file_got_changed(tmp_path):
         o.delete_pod()
 
 
+def test_command_long_output(tmp_path):
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    command = ["cat", "/etc/services"]
+    try:
+        out = o.exec(command=command)
+    finally:
+        o.delete_pod()
+    # random strings from /etc/services: beginning, middle, end
+    assert "ssh" in out
+    assert "7687/tcp" in out
+    assert "RADIX" in out
+
+
 @pytest.mark.parametrize(
     "git_url,branch",
     (
@@ -406,6 +420,7 @@ def test_changing_mode(tmp_path):
         ("test_lost_found_is_ignored", None),
         ("test_md_new_namespace", {"new_namespace": True}),
         ("test_changing_mode", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
+        ("test_command_long_output", None),
     ),
 )
 def test_from_pod(test_name, kwargs):
