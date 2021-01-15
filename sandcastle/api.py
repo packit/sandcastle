@@ -185,6 +185,14 @@ class Sandcastle(object):
             "name": self.pod_name,
             "env": env_image_vars,
             "imagePullPolicy": "IfNotPresent",
+            # we may be tempted to enable tty in the pod to get pretty terminal output
+            # but it's not as simple as that, for example
+            # npm loves to make beautiful terminal output full of colors and sunshine
+            # which would look hideous in ASCII logs (terminal escape sequences),
+            # therefore only allocate tty if you are debugging something locally by
+            # invoking real shell inside, tty should be set to false by default
+            # TODO: making this configurable would be the best
+            # "tty": True,
             "resources": {
                 "limits": {"memory": "512Mi"},
                 "requests": {"memory": "512Mi"},
