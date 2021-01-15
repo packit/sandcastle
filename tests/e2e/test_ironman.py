@@ -284,7 +284,8 @@ def test_md_e2e(tmp_path, git_url, branch):
     )
     o.run()
     try:
-        o.exec(command=["packit", "--debug", "srpm"])
+        output = o.exec(command=["packit", "--debug", "srpm"])
+        print(output)
         assert list(t.glob("*.src.rpm"))
         o.exec(command=["packit", "--help"])
 
