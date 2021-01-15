@@ -40,6 +40,7 @@ TEST_IMAGE_BASENAME = "sandcastle-tests"
 TEST_IMAGE_NAME = f"docker.io/usercont/{TEST_IMAGE_BASENAME}"
 NAMESPACE = "myproject"
 SANDCASTLE_MOUNTPOINT = "/sandcastle"
+PACKIT_SRPM_CMD = ["packit", "--debug", "srpm"]
 
 
 # exterminate!

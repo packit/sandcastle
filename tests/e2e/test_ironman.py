@@ -39,6 +39,7 @@ from tests.conftest import (
     NAMESPACE,
     run_test_within_pod,
     SANDCASTLE_MOUNTPOINT,
+    PACKIT_SRPM_CMD,
 )
 
 
@@ -263,13 +264,24 @@ def test_command_long_output(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "git_url,branch",
+    "git_url,branch,command",
     (
-        ("https://github.com/packit-service/hello-world.git", "master"),
-        ("https://github.com/packit-service/ogr.git", "master"),
+        (
+            "https://github.com/packit-service/hello-world.git",
+            "master",
+            PACKIT_SRPM_CMD,
+        ),
+        ("https://github.com/packit-service/ogr.git", "master", PACKIT_SRPM_CMD),
+        (
+            "https://github.com/cockpit-project/cockpit-podman.git",
+            "master",
+            # this downloads megabytes of npm modules
+            # and verifies we can run npm in sandcastle
+            ["make", "dist-gzip"],
+        ),
     ),
 )
-def test_md_e2e(tmp_path, git_url, branch):
+def test_md_e2e(tmp_path, git_url, branch, command):
     # running in k8s
     if "KUBERNETES_SERVICE_HOST" in os.environ:
         t = Path(SANDCASTLE_MOUNTPOINT, f"clone-{get_timestamp_now()}")
@@ -286,7 +298,8 @@ def test_md_e2e(tmp_path, git_url, branch):
     try:
         output = o.exec(command=["packit", "--debug", "srpm"])
         print(output)
-        assert list(t.glob("*.src.rpm"))
+        if command == PACKIT_SRPM_CMD:
+            assert list(t.glob("*.src.rpm"))
         o.exec(command=["packit", "--help"])
 
         with pytest.raises(SandcastleCommandFailed) as ex:
