@@ -194,7 +194,11 @@ class Sandcastle(object):
             # TODO: making this configurable would be the best
             # "tty": True,
             "resources": {
-                "limits": {"memory": "512Mi"},
+                # 512/768 may feel like it's too much, but!
+                # git-clone needs a lot of memory
+                # nodejs is hungry, especially when npm compiles stuff
+                # https://developer.ibm.com/languages/node-js/articles/nodejs-memory-management-in-container-environments/#
+                "limits": {"memory": "768Mi"},
                 "requests": {"memory": "512Mi"},
             },
         }

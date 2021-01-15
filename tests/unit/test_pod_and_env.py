@@ -213,7 +213,7 @@ def test_manifest(init_openshift_deployer):
                     "env": [{"name": KEY, "value": VALUE}],
                     "imagePullPolicy": "IfNotPresent",
                     "resources": {
-                        "limits": {"memory": "512Mi"},
+                        "limits": {"memory": "768Mi"},
                         "requests": {"memory": "512Mi"},
                     },
                 }
