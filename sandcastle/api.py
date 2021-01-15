@@ -502,11 +502,11 @@ class Sandcastle(object):
                 continue
         raise SandcastleException("Unable to connect to the kubernetes API server.")
 
-    def _prepare_mdir_exec(
+    def _prepare_exec(
         self, command: List[str], target_dir: Optional[Path] = None
     ) -> Tuple[Path, Path]:
         """
-        wrap a command to exec in the sandbox in a script
+        wrap a command for exec into a script file and place it to sandbox
 
         :param command: command to wrap
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
@@ -514,14 +514,20 @@ class Sandcastle(object):
         """
         cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
 
-        root_target_dir = Path(target_dir or self._do_exec(["mktemp"]).strip())
+        root_target_dir = Path(target_dir or self._do_exec(["mktemp", "-d"]).strip())
         # this is where the content of mapped_dir will be
         unique_dir = root_target_dir / self.pod_name
         script_name = "script.sh"
 
-        # git checkout - oc cp does not preserve the file mode and makes the repo dirty
         # set -e - fail the script when a command fails
-        script_template = f"#!/bin/bash\nset -e\ncd {unique_dir}\nexec {cmd_str}\n"
+        script_template = (
+            "#!/bin/bash\n"
+            "set -eu\n"
+            "source /home/sandcastle/setup_env_in_openshift.sh\n"
+            f"mkdir -p {unique_dir}\n"
+            f"cd {unique_dir}\n"
+            f"exec {cmd_str}\n"
+        )
         logger.debug("mapped dir command: %r", script_template)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_script_path = Path(tmpdir, script_name)
@@ -545,12 +551,13 @@ class Sandcastle(object):
                 "You have reached a timeout: the pod is no longer running."
             )
         logger.info("command = %s", command)
-        unique_dir = None
+
+        target_dir = None if not self.mapped_dir else Path(self.mapped_dir.path)
+        unique_dir, target_script_path = self._prepare_exec(
+            command, target_dir=target_dir
+        )
+        command = ["bash", str(target_script_path)]
         if self.mapped_dir:
-            unique_dir, target_script_path = self._prepare_mdir_exec(
-                command, target_dir=Path(self.mapped_dir.path)
-            )
-            command = ["bash", str(target_script_path)]
             self._copy_path_to_pod(self.mapped_dir.local_dir, unique_dir)
         # https://github.com/kubernetes-client/python/blob/master/examples/exec.py
         # https://github.com/kubernetes-client/python/issues/812#issuecomment-499423823

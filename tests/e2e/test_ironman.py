@@ -263,6 +263,30 @@ def test_command_long_output(tmp_path):
     assert "RADIX" in out
 
 
+def test_user_is_set(tmp_path):
+    """
+    verify that $HOME is writable and commands are executed
+    using a user which has an passwd entry
+    """
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    try:
+        assert o.exec(command=["getent", "passwd", "sandcastle"]).startswith(
+            "sandcastle:x:"
+        )
+        assert o.exec(command=["id", "-u", "-n"]).strip() == "sandcastle"
+        assert o.exec(
+            command=[
+                "bash",
+                "-c",
+                "touch ~/.i.want.to.write.to.home "
+                "&& ls -l /home/sandcastle/.i.want.to.write.to.home",
+            ]
+        )
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.parametrize(
     "git_url,branch,command",
     (
@@ -434,6 +458,7 @@ def test_changing_mode(tmp_path):
         ("test_md_new_namespace", {"new_namespace": True}),
         ("test_changing_mode", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
         ("test_command_long_output", None),
+        ("test_user_is_set", None),
     ),
 )
 def test_from_pod(test_name, kwargs):
