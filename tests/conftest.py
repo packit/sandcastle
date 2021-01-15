@@ -35,11 +35,12 @@ from sandcastle.utils import run_command, get_timestamp_now, clean_string
 
 NON_EX_IMAGE = "non-ex-image"
 PROJECT_NAME = "cyborg"
-SANDBOX_IMAGE = "docker.io/usercont/sandcastle"
+SANDBOX_IMAGE = "docker.io/usercont/sandcastle:prod"
 TEST_IMAGE_BASENAME = "sandcastle-tests"
 TEST_IMAGE_NAME = f"docker.io/usercont/{TEST_IMAGE_BASENAME}"
 NAMESPACE = "myproject"
 SANDCASTLE_MOUNTPOINT = "/sandcastle"
+PACKIT_SRPM_CMD = ["packit", "--debug", "srpm"]
 
 
 # exterminate!
