@@ -533,11 +533,14 @@ class Sandcastle(object):
         try:
             # https://github.com/packit-service/sandcastle/issues/23
             # even with a >0 number or ==0, select tends to block
-            ws_client.run_forever(timeout=WEBSOCKET_CALL_TIMEOUT)
-            errors = ws_client.read_channel(ERROR_CHANNEL)
-            logger.debug("%s", errors)
-            # read_all would consume ERR_CHANNEL, so read_all needs to be last
-            response = ws_client.read_all()
+            response = ""
+            errors = ""
+            while ws_client.is_open():
+                ws_client.run_forever(timeout=WEBSOCKET_CALL_TIMEOUT)
+                errors += ws_client.read_channel(ERROR_CHANNEL)
+                logger.debug("%s", errors)
+                # read_all would consume ERR_CHANNEL, so read_all needs to be last
+                response += ws_client.read_all()
             if errors:
                 # errors = '{"metadata":{},"status":"Success"}'
                 j = json.loads(errors)
