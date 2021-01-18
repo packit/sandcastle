@@ -277,7 +277,7 @@ def test_command_long_output(tmp_path):
             "master",
             # this downloads megabytes of npm modules
             # and verifies we can run npm in sandcastle
-            ["make", "dist-gzip"],
+            ["make", "srpm"],
         ),
     ),
 )
@@ -296,10 +296,9 @@ def test_md_e2e(tmp_path, git_url, branch, command):
     )
     o.run()
     try:
-        output = o.exec(command=["packit", "--debug", "srpm"])
+        output = o.exec(command=command)
         print(output)
-        if command == PACKIT_SRPM_CMD:
-            assert list(t.glob("*.src.rpm"))
+        assert list(t.glob("*.src.rpm"))
         o.exec(command=["packit", "--help"])
 
         with pytest.raises(SandcastleCommandFailed) as ex:
