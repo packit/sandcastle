@@ -321,9 +321,26 @@ class Sandcastle(object):
 
         :return: response from the API server
         """
-        return self.api.create_namespaced_pod(
-            body=pod_manifest, namespace=self.k8s_namespace_name
-        )
+        idx = 1
+        # if we hit timebound quota, let's try 5 times with expo backoff
+        while idx < 6:
+            try:
+                logger.debug(f"Creating sandbox pod via kubernetes API, try {idx}")
+                return self.api.create_namespaced_pod(
+                    body=pod_manifest, namespace=self.k8s_namespace_name
+                )
+            except ApiException as ex:
+                logger.info(f"Unable to create the pod: {ex}")
+                # reproducer for this is to set memory quota for your cluster:
+                # https://docs.openshift.com/online/pro/dev_guide/compute_resources.html#dev-memory-requests
+                if ex.status == "403":  # forbidden
+                    sleep_time = 3 ** idx
+                    logger.debug(f"Trying again in {sleep_time}s")
+                    time.sleep(sleep_time)
+                else:
+                    raise
+            idx += 1
+        raise SandcastleException("Unable to schedule the sandbox pod.")
 
     def is_pod_already_deployed(self) -> bool:
         """
