@@ -65,8 +65,8 @@ from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
 from sandcastle.constants import (
     WEBSOCKET_CALL_TIMEOUT,
-    RETRY_INIT_WS_CLIENT_COUNTER,
-    RETRY_CREATE_POD_COUNTER,
+    RETRY_INIT_WS_CLIENT_MAX,
+    RETRY_CREATE_POD_MAX,
 )
 from sandcastle.exceptions import (
     SandcastleCommandFailed,
@@ -323,7 +323,7 @@ class Sandcastle(object):
         :return: response from the API server
         """
         # if we hit timebound quota, let's try 5 times with expo backoff
-        for idx in range(1, RETRY_CREATE_POD_COUNTER):
+        for idx in range(1, RETRY_CREATE_POD_MAX):
             try:
                 logger.debug(f"Creating sandbox pod via kubernetes API, try {idx}")
                 return self.api.create_namespaced_pod(
@@ -468,7 +468,7 @@ class Sandcastle(object):
     def _do_exec(
         self, command: List[str], preload_content=True
     ) -> Union[WSClient, str]:
-        for i in range(RETRY_INIT_WS_CLIENT_COUNTER):
+        for i in range(RETRY_INIT_WS_CLIENT_MAX):
             try:
                 s = stream(
                     self.api.connect_get_namespaced_pod_exec,
