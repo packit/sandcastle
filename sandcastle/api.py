@@ -63,6 +63,11 @@ from kubernetes.config import load_incluster_config, load_kube_config
 from kubernetes.stream import stream
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
 
+from sandcastle.constants import (
+    WEBSOCKET_CALL_TIMEOUT,
+    RETRY_INIT_WS_CLIENT_MAX,
+    RETRY_CREATE_POD_MAX,
+)
 from sandcastle.exceptions import (
     SandcastleCommandFailed,
     SandcastleExecutionError,
@@ -77,10 +82,6 @@ from sandcastle.utils import (
 )
 
 logger = logging.getLogger(__name__)
-
-WEBSOCKET_CALL_TIMEOUT = 30.0  # seconds
-# try to initiate WS Client 5 times
-MAGIC_KONSTANT = 5
 
 
 class MappedDir:
@@ -321,9 +322,8 @@ class Sandcastle(object):
 
         :return: response from the API server
         """
-        idx = 1
         # if we hit timebound quota, let's try 5 times with expo backoff
-        while idx < 6:
+        for idx in range(1, RETRY_CREATE_POD_MAX):
             try:
                 logger.debug(f"Creating sandbox pod via kubernetes API, try {idx}")
                 return self.api.create_namespaced_pod(
@@ -339,7 +339,6 @@ class Sandcastle(object):
                     time.sleep(sleep_time)
                 else:
                     raise
-            idx += 1
         raise SandcastleException("Unable to schedule the sandbox pod.")
 
     def is_pod_already_deployed(self) -> bool:
@@ -469,7 +468,7 @@ class Sandcastle(object):
     def _do_exec(
         self, command: List[str], preload_content=True
     ) -> Union[WSClient, str]:
-        for i in range(MAGIC_KONSTANT):
+        for i in range(RETRY_INIT_WS_CLIENT_MAX):
             try:
                 s = stream(
                     self.api.connect_get_namespaced_pod_exec,
