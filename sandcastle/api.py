@@ -322,9 +322,8 @@ class Sandcastle(object):
 
         :return: response from the API server
         """
-        idx = 1
         # if we hit timebound quota, let's try 5 times with expo backoff
-        while idx < RETRY_CREATE_POD_COUNTER:
+        for idx in range(1, RETRY_CREATE_POD_COUNTER):
             try:
                 logger.debug(f"Creating sandbox pod via kubernetes API, try {idx}")
                 return self.api.create_namespaced_pod(
@@ -340,7 +339,6 @@ class Sandcastle(object):
                     time.sleep(sleep_time)
                 else:
                     raise
-            idx += 1
         raise SandcastleException("Unable to schedule the sandbox pod.")
 
     def is_pod_already_deployed(self) -> bool:
