@@ -21,6 +21,8 @@
 # SOFTWARE.
 import pytest
 from flexmock import flexmock
+from kubernetes.client.models.v1_pod import V1Pod
+from kubernetes.client.models.v1_pod_status import V1PodStatus
 
 from kubernetes.client.rest import ApiException
 from sandcastle import Sandcastle, SandcastleExecutionError
@@ -176,6 +178,21 @@ def test_pod_not_deployed(init_openshift_deployer, pod_not_deployed):
     od = init_openshift_deployer
     flexmock(od).should_receive("get_pod").and_return(pod_not_deployed)
     assert od.is_pod_already_deployed()
+
+
+def test_pod_scheduled(init_openshift_deployer, pod_not_deployed):
+    od = init_openshift_deployer
+    flexmock(od).should_receive("get_pod").and_raise(
+        ApiException(
+            status=404,
+        )
+    ).and_return(V1Pod(status=V1PodStatus(phase="Running"))).and_return(
+        V1Pod(status=V1PodStatus(phase="Succeeded"))
+    )
+    flexmock(od.api).should_receive("create_namespaced_pod").and_raise(
+        ApiException(status="403")
+    ).and_return(1)
+    od.deploy_pod(["false"])
 
 
 @pytest.mark.parametrize(
