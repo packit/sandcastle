@@ -267,11 +267,11 @@ def test_command_long_output(tmp_path):
     "git_url,branch,command",
     (
         (
-            "https://github.com/packit-service/hello-world.git",
-            "master",
+            "https://github.com/packit/hello-world.git",
+            "main",
             PACKIT_SRPM_CMD,
         ),
-        ("https://github.com/packit-service/ogr.git", "master", PACKIT_SRPM_CMD),
+        ("https://github.com/packit/ogr.git", "main", PACKIT_SRPM_CMD),
         (
             "https://github.com/cockpit-project/cockpit-podman.git",
             "master",
