@@ -333,7 +333,14 @@ class Sandcastle(object):
                 logger.info(f"Unable to create the pod: {ex}")
                 # reproducer for this is to set memory quota for your cluster:
                 # https://docs.openshift.com/online/pro/dev_guide/compute_resources.html#dev-memory-requests
-                if ex.status == "403":  # forbidden
+                exc_str = str(ex)
+                # there is no documentation to say what's inside the exception
+                #   [2021-02-08 10:22:56,070: INFO/ForkPoolWorker-1] Unable to create the pod: (403)
+                #   HTTP response headers: HTTPHeaderDict({'Cache-Control': 'no-store', ...
+                #   HTTP response body: {"kind":"Status","status":"Failure",
+                #   "message":"pods \"docker-io-usercont-sandcastle-prod-...\" is forbidden...
+                #     "code":403}
+                if "403" in exc_str:  # forbidden
                     sleep_time = 3 ** idx
                     logger.debug(f"Trying again in {sleep_time}s")
                     time.sleep(sleep_time)
