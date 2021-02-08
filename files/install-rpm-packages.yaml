@@ -26,6 +26,7 @@
           - npm # cockpit project needs these
           - sassc # cockpit project needs these
           - python3-docutils # for those who generates man pages from README.md
+          - python3-wheel # for python projects
           - json-c-devel # \
           - systemd-devel # https://github.com/Scribery/tlog/pull/274
           - libcurl-devel # /
