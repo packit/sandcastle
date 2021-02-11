@@ -10,4 +10,4 @@ RETRY_INIT_WS_CLIENT_MAX = 5
 # when calling k8s' API to create a pod, we may get an error that
 # resources are not available at that moment (timebound quota) and may
 # be later - so let's retry this many times
-RETRY_CREATE_POD_MAX = 6
+RETRY_CREATE_POD_MAX = 8

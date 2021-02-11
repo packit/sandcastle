@@ -322,7 +322,10 @@ class Sandcastle(object):
 
         :return: response from the API server
         """
-        # if we hit timebound quota, let's try 5 times with expo backoff
+        # if we hit timebound quota, let's try RETRY_CREATE_POD_MAX times with expo backoff
+        # 2 ** 7 = 128 = 2 minutes
+        # 2 ** 8 = 256 = 4 minutes
+        # in total we try for ~8 minutes
         for idx in range(1, RETRY_CREATE_POD_MAX):
             try:
                 logger.debug(f"Creating sandbox pod via kubernetes API, try {idx}")
@@ -341,7 +344,7 @@ class Sandcastle(object):
                 #   "message":"pods \"docker-io-usercont-sandcastle-prod-...\" is forbidden...
                 #     "code":403}
                 if "403" in exc_str:  # forbidden
-                    sleep_time = 3 ** idx
+                    sleep_time = 2 ** idx
                     logger.debug(f"Trying again in {sleep_time}s")
                     time.sleep(sleep_time)
                 else:
