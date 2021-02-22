@@ -56,16 +56,6 @@ def purge_dir_content(di: Path):
             rmtree(item)
 
 
-def test_basic_e2e_inside():
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, pod_name="lllollz"
-    )
-    try:
-        o.run(command=["ls", "-lha"])
-    finally:
-        o.delete_pod()
-
-
 def test_run_failure():
     o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     try:
@@ -444,7 +434,6 @@ def test_changing_mode(tmp_path):
 @pytest.mark.parametrize(
     "test_name,kwargs",
     (
-        ("test_basic_e2e_inside", None),
         ("test_exec", None),
         ("test_md_exec", None),
         ("test_run_failure", None),
