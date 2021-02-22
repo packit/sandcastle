@@ -56,6 +56,21 @@ def purge_dir_content(di: Path):
             rmtree(item)
 
 
+def test_exec_env():
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    try:
+        env_list = o.exec(
+            command=["bash", "-c", "env"], env={"A": None, "B": "", "C": "c", "D": 1}
+        )
+        assert "A=\n" in env_list
+        assert "B=\n" in env_list
+        assert "C=c\n" in env_list
+        assert "D=1\n" in env_list
+    finally:
+        o.delete_pod()
+
+
 def test_run_failure():
     o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
     try:
@@ -438,6 +453,7 @@ def test_changing_mode(tmp_path):
     "test_name,kwargs",
     (
         ("test_exec", None),
+        ("test_exec_env", None),
         ("test_md_exec", None),
         ("test_run_failure", None),
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),

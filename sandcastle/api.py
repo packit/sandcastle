@@ -503,13 +503,17 @@ class Sandcastle(object):
         raise SandcastleException("Unable to connect to the kubernetes API server.")
 
     def _prepare_exec(
-        self, command: List[str], target_dir: Optional[Path] = None
+        self,
+        command: List[str],
+        target_dir: Optional[Path] = None,
+        env: Optional[Dict] = None,
     ) -> Tuple[Path, Path]:
         """
         wrap a command for exec into a script file and place it to sandbox
 
         :param command: command to wrap
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
+        :param env: env vars to set in the script.sh so they are available to the "command"
         :return: (path to the sync'd dir within sandbox, path to the script within sandbox)
         """
         cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
@@ -526,8 +530,13 @@ class Sandcastle(object):
             "source /home/sandcastle/setup_env_in_openshift.sh\n"
             f"mkdir -p {unique_dir}\n"
             f"cd {unique_dir}\n"
-            f"exec {cmd_str}\n"
         )
+        if env:
+            for k, v in env.items():
+                v = v or ""  # if v == None, we want "" instead of "None"
+                script_template += f'export {k}="{v}"\n'
+
+        script_template += f"exec {cmd_str}\n"
         logger.debug("mapped dir command: %r", script_template)
         with tempfile.TemporaryDirectory() as tmpdir:
             local_script_path = Path(tmpdir, script_name)
@@ -537,11 +546,16 @@ class Sandcastle(object):
         target_script_path = root_target_dir / script_name
         return unique_dir, target_script_path
 
-    def exec(self, command: List[str]) -> str:
+    def exec(
+        self,
+        command: List[str],
+        env: Optional[Dict] = None,
+    ) -> str:
         """
         exec a command in a running pod
 
         :param command: command to run
+        :param env: a Dict with env vars to set for the exec'd command
         :returns logs
         """
         # we need to check first if the pod is running; otherwise we'd get a nasty 500
@@ -554,7 +568,7 @@ class Sandcastle(object):
 
         target_dir = None if not self.mapped_dir else Path(self.mapped_dir.path)
         unique_dir, target_script_path = self._prepare_exec(
-            command, target_dir=target_dir
+            command, target_dir=target_dir, env=env
         )
         command = ["bash", str(target_script_path)]
         if self.mapped_dir:
