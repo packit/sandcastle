@@ -1,6 +1,6 @@
 # This is the default sandbox container image to run untrusted commands.
 # It should contain basic utilities, such as git, make, rpmbuild, etc.
-FROM docker.io/usercont/base
+FROM quay.io/packit/base
 
 ENV LC_ALL=C \
     PYTHONDONTWRITEBYTECODE=yes \
