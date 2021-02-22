@@ -217,7 +217,10 @@ def test_md_multiple_exec(tmp_path):
         o.exec(command=["touch", "./stark/asd"])
         assert tmp_path.joinpath("stark/asd").is_file()
         o.exec(command=["touch", "./zxc"])
-        assert tmp_path.joinpath("zxc").is_file()
+        zxc = tmp_path.joinpath("zxc")
+        assert zxc.is_file()
+        zxc.write_text("vbnm")
+        assert "vbnm" == o.exec(command=["cat", "./zxc"])
     finally:
         o.delete_pod()
 
