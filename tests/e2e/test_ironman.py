@@ -236,6 +236,7 @@ def test_md_multiple_exec(tmp_path):
         assert zxc.is_file()
         zxc.write_text("vbnm")
         assert "vbnm" == o.exec(command=["cat", "./zxc"])
+        assert o.exec(command=["pwd"], cwd="stark/").rstrip("\n").endswith("/stark")
     finally:
         o.delete_pod()
 

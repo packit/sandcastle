@@ -507,6 +507,7 @@ class Sandcastle(object):
         command: List[str],
         target_dir: Optional[Path] = None,
         env: Optional[Dict] = None,
+        cwd: Union[str, Path] = None,
     ) -> Tuple[Path, Path]:
         """
         wrap a command for exec into a script file and place it to sandbox
@@ -514,6 +515,8 @@ class Sandcastle(object):
         :param command: command to wrap
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
         :param env: env vars to set in the script.sh so they are available to the "command"
+        :param cwd: run the command in this directory, defaults to a mapped dir
+               or a temporary directory if mapped_dir is not set
         :return: (path to the sync'd dir within sandbox, path to the script within sandbox)
         """
         cmd_str = " ".join(f"{shlex.quote(c)}" for c in command)
@@ -528,9 +531,9 @@ class Sandcastle(object):
             "#!/bin/bash\n"
             "set -eu\n"
             "source /home/sandcastle/setup_env_in_openshift.sh\n"
-            f"mkdir -p {unique_dir}\n"
-            f"cd {unique_dir}\n"
         )
+        cwd = cwd or ""
+        script_template += f"mkdir -p {unique_dir}/{cwd}\ncd {unique_dir}/{cwd}\n"
         if env:
             for k, v in env.items():
                 v = v or ""  # if v == None, we want "" instead of "None"
@@ -550,14 +553,22 @@ class Sandcastle(object):
         self,
         command: List[str],
         env: Optional[Dict] = None,
+        cwd: Union[str, Path] = None,
     ) -> str:
         """
         exec a command in a running pod
 
         :param command: command to run
         :param env: a Dict with env vars to set for the exec'd command
+        :param cwd: run the command in this subdirectory of a mapped dir,
+               defaults to a mapped dir or a temporary directory if mapped_dir is not set
         :returns logs
         """
+        if not self.mapped_dir and cwd:
+            raise SandcastleException(
+                "The cwd argument only works with a mapped dir - "
+                "please set a mapped dir or change directory in the command you provide."
+            )
         # we need to check first if the pod is running; otherwise we'd get a nasty 500
         pod = self.get_pod()
         if pod.status.phase != "Running":
@@ -568,7 +579,7 @@ class Sandcastle(object):
 
         target_dir = None if not self.mapped_dir else Path(self.mapped_dir.path)
         unique_dir, target_script_path = self._prepare_exec(
-            command, target_dir=target_dir, env=env
+            command, target_dir=target_dir, env=env, cwd=cwd
         )
         command = ["bash", str(target_script_path)]
         if self.mapped_dir:
