@@ -56,12 +56,17 @@ def purge_dir_content(di: Path):
             rmtree(item)
 
 
-def test_basic_e2e_inside():
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, pod_name="lllollz"
-    )
+def test_exec_env():
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
     try:
-        o.run(command=["ls", "-lha"])
+        env_list = o.exec(
+            command=["bash", "-c", "env"], env={"A": None, "B": "", "C": "c", "D": 1}
+        )
+        assert "A=\n" in env_list
+        assert "B=\n" in env_list
+        assert "C=c\n" in env_list
+        assert "D=1\n" in env_list
     finally:
         o.delete_pod()
 
@@ -227,7 +232,11 @@ def test_md_multiple_exec(tmp_path):
         o.exec(command=["touch", "./stark/asd"])
         assert tmp_path.joinpath("stark/asd").is_file()
         o.exec(command=["touch", "./zxc"])
-        assert tmp_path.joinpath("zxc").is_file()
+        zxc = tmp_path.joinpath("zxc")
+        assert zxc.is_file()
+        zxc.write_text("vbnm")
+        assert "vbnm" == o.exec(command=["cat", "./zxc"])
+        assert o.exec(command=["pwd"], cwd="stark/").rstrip("\n").endswith("/stark")
     finally:
         o.delete_pod()
 
@@ -261,6 +270,30 @@ def test_command_long_output(tmp_path):
     assert "ssh" in out
     assert "7687/tcp" in out
     assert "RADIX" in out
+
+
+def test_user_is_set(tmp_path):
+    """
+    verify that $HOME is writable and commands are executed
+    using a user which has an passwd entry
+    """
+    o = Sandcastle(image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE)
+    o.run()
+    try:
+        assert o.exec(command=["getent", "passwd", "sandcastle"]).startswith(
+            "sandcastle:x:"
+        )
+        assert o.exec(command=["id", "-u", "-n"]).strip() == "sandcastle"
+        assert o.exec(
+            command=[
+                "bash",
+                "-c",
+                "touch ~/.i.want.to.write.to.home "
+                "&& ls -l /home/sandcastle/.i.want.to.write.to.home",
+            ]
+        )
+    finally:
+        o.delete_pod()
 
 
 @pytest.mark.parametrize(
@@ -420,8 +453,8 @@ def test_changing_mode(tmp_path):
 @pytest.mark.parametrize(
     "test_name,kwargs",
     (
-        ("test_basic_e2e_inside", None),
         ("test_exec", None),
+        ("test_exec_env", None),
         ("test_md_exec", None),
         ("test_run_failure", None),
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
@@ -434,6 +467,7 @@ def test_changing_mode(tmp_path):
         ("test_md_new_namespace", {"new_namespace": True}),
         ("test_changing_mode", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
         ("test_command_long_output", None),
+        ("test_user_is_set", None),
     ),
 )
 def test_from_pod(test_name, kwargs):
