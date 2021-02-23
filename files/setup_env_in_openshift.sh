@@ -1,6 +1,8 @@
 #!/usr/bin/bash
 
-set -x
+# uncomment for debugging, otherwise leave commented out, we don't
+# want to provide output from this script to users to confuse them
+# set -x
 
 # Generate passwd file based on current uid, needed for fedpkg
 grep -v ^sandcastle /etc/passwd > "${HOME}/passwd"
