@@ -1,6 +1,6 @@
 # This is meant to run in an openshift pod.
 # The expectation is to create sandbox pods from this one.
-FROM docker.io/usercont/sandcastle
+FROM quay.io/packit/sandcastle
 
 COPY tests/requirements.txt ./tests/
 COPY .git setup.py setup.cfg ./

@@ -87,7 +87,7 @@ def pod_json_deployed():
             "containers": [
                 {
                     "name": "sandcastle",
-                    "image": "docker.io/usercont/sandcastle",
+                    "image": "quay.io/packit/sandcastle",
                     "env": [
                         {
                             "name": "NAMESPACE",
@@ -137,8 +137,8 @@ def pod_json_deployed():
                     "lastState": {},
                     "ready": "true",
                     "restartCount": 0,
-                    "image": "docker.io/usercont/sandcastle:latest",
-                    "imageID": "docker-pullable://docker.io/usercont/"
+                    "image": "quay.io/packit/sandcastle:latest",
+                    "imageID": "docker-pullable://quay.io/packit/"
                     "sandcastle@sha256:51289119edf387c47ed149"
                     "eb3382c23f4115bc343adcaaa6e1731d269b6ec70a",
                     "containerID": "docker://201ad777bb6d36077590fed8796"
