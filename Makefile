@@ -1,7 +1,7 @@
 .PHONY: check build test-image-build push clean
 
-IMAGE_NAME = docker.io/usercont/sandcastle
-TEST_IMAGE_NAME = docker.io/usercont/sandcastle-tests
+IMAGE_NAME = quay.io/packit/sandcastle
+TEST_IMAGE_NAME = quay.io/packit/sandcastle-tests
 TEST_TARGET = ./tests
 
 test-image-build: build
