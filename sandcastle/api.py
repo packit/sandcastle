@@ -473,7 +473,6 @@ class Sandcastle(object):
         """
         self.deploy_pod(command=command)
         logger.info("Sandbox pod is deployed.")
-        return self.get_logs()
 
     def _do_exec(
         self, command: List[str], preload_content=True
