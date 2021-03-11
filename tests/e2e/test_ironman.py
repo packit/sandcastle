@@ -6,6 +6,7 @@ from pathlib import Path
 from shutil import rmtree
 
 import pytest
+from flexmock import flexmock
 
 from sandcastle import (
     Sandcastle,
@@ -153,6 +154,34 @@ def test_exec_succ_pod(tmp_path):
         with pytest.raises(SandcastleTimeoutReached) as e:
             o.exec(command=["true"])
         assert "timeout" in str(e.value)
+    finally:
+        o.delete_pod()
+
+
+def test_timeout(tmp_path: Path):
+    """
+    make sure exec runs are handled well when the pod times out
+    and we provide output of the command in the exception
+    """
+    tmp_path.joinpath("test").write_text("test")
+    m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
+    )
+    # we are going to trick sandcastle into thinking we are using the default command
+    # but we are not, b/c we don't want to wait 30 minutes for it time out in CI
+    o.set_pod_manifest(["sleep", "7"])
+    flexmock(Sandcastle).should_receive("set_pod_manifest").and_return(None).once()
+    o.run()
+    try:
+        # sadly, openshift does not tell us in any way that the container finished
+        # and that's why our exec got killed
+        with pytest.raises(SandcastleCommandFailed) as e:
+            # run a long running command and watch it get killed
+            o.exec(command=["bash", "-c", "while true; do date; sleep 1; done"])
+        assert "Command failed" in str(e.value)
+        assert e.value.rc == 137
+        assert e.value.output  # we wanna be sure there was some output
     finally:
         o.delete_pod()
 
@@ -441,6 +470,7 @@ def test_changing_mode(tmp_path):
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
         ("test_pod_sa_not_in_sandbox", None),
         ("test_exec_succ_pod", None),
+        ("test_timeout", None),
         ("test_md_multiple_exec", None),
         ("test_file_got_changed", None),
         ("test_md_e2e", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),

@@ -176,9 +176,10 @@ class Sandcastle(object):
         self.volume_mounts: List[VolumeSpec] = volume_mounts or []
         self.mapped_dir: MappedDir = mapped_dir
         self.pvc: Optional[PVC] = None
+        self.pod_manifest: Dict = {}
 
     # TODO: refactor into a pod class
-    def create_pod_manifest(self, command: Optional[List] = None) -> dict:
+    def set_pod_manifest(self, command: Optional[List] = None):
         env_image_vars = self.build_env_image_vars(self.env_vars)
         # this is broken down for sake of mypy
         container = {
@@ -208,7 +209,7 @@ class Sandcastle(object):
             "restartPolicy": "Never",
             "automountServiceAccountToken": False,
         }
-        pod_manifest = {
+        self.pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
             "metadata": {"name": self.pod_name},
@@ -257,8 +258,6 @@ class Sandcastle(object):
                     )
                 volumes.append(di)
 
-        return pod_manifest
-
     @staticmethod
     def build_env_image_vars(env_dict: Dict) -> List:
         if not env_dict:
@@ -285,6 +284,13 @@ class Sandcastle(object):
         if not configuration.api_key:
             raise SandcastleException("No api_key, can't access any cluster.\n")
         return CoreV1Api(ApiClient(configuration=configuration))
+
+    def is_pod_running(self) -> bool:
+        """
+        is the pod running: Phase == Running?
+        :return: True if it is, False if it's not
+        """
+        return self.get_pod().status.phase == "Running"
 
     def get_pod(self) -> V1Pod:
         """
@@ -396,8 +402,8 @@ class Sandcastle(object):
         if self.is_pod_already_deployed():
             self.delete_pod()
 
-        pod_manifest = self.create_pod_manifest(command=command)
-        self.create_pod(pod_manifest)
+        self.set_pod_manifest(command=command)
+        self.create_pod(self.pod_manifest)
 
         # wait for the pod to start
         count = 0
@@ -569,8 +575,7 @@ class Sandcastle(object):
                 "please set a mapped dir or change directory in the command you provide."
             )
         # we need to check first if the pod is running; otherwise we'd get a nasty 500
-        pod = self.get_pod()
-        if pod.status.phase != "Running":
+        if not self.is_pod_running():
             raise SandcastleTimeoutReached(
                 "You have reached a timeout: the pod is no longer running."
             )
@@ -608,8 +613,19 @@ class Sandcastle(object):
                 elif status == "Failure":
                     logger.info("exec command failed")
                     logger.debug(j)
-                    logger.error(f"output = {response!r}")
-                    self._copy_mdir_from_pod(unique_dir)
+                    logger.info(f"output:\n{response}")
+                    # the timeout could have been reached here which means
+                    # the pod is not running, so we are not able `oc rsync` things from inside:
+                    # we won't be needing the data any more since p-s halts execution
+                    # after a failure in action, we only do this b/c it's the right thing to do
+                    # for use cases outside p-s
+                    try:
+                        self._copy_mdir_from_pod(unique_dir)
+                    except SandcastleException:
+                        # yes, we eat the exception because the one raised below
+                        # is much more important since it contains metadata about what happened;
+                        # logs will contain info about what happened while trying to copy things
+                        pass
 
                     # ('{"metadata":{},"status":"Failure","message":"command terminated with '
                     #  'non-zero exit code: Error executing in Docker Container: '
@@ -677,17 +693,30 @@ class Sandcastle(object):
         :param local_dir: path to the local dir
         :param pod_dir: path within the pod
         """
-        run_command(
-            [
-                "oc",
-                "rsync",
-                "--delete",  # delete files in local_dir which are not in pod_dir
-                "--quiet=true",  # avoid huge logs
-                f"--namespace={self.k8s_namespace_name}",
-                f"{self.pod_name}:{pod_dir}/",  # trailing / to copy only content of dir
-                f"{local_dir}",
-            ]
-        )
+        try:
+            run_command(
+                [
+                    "oc",
+                    "rsync",
+                    "--delete",  # delete files in local_dir which are not in pod_dir
+                    "--quiet=true",  # avoid huge logs
+                    f"--namespace={self.k8s_namespace_name}",
+                    f"{self.pod_name}:{pod_dir}/",  # trailing / to copy only content of dir
+                    f"{local_dir}",
+                ]
+            )
+        except Exception as ex:
+            # There is a race condition in k8s that it tells the pod is running even
+            # though it already killed an exec session and hence we couldn't copy
+            # anything from the pod
+            if not self.is_pod_running() or "not available in container" in str(ex):
+                logger.warning(
+                    "The pod is not running while we tried to copy data out of it."
+                )
+                raise SandcastleException(
+                    "Cannot copy data from the sandbox - the pod is not running."
+                )
+            raise
 
     def _copy_mdir_from_pod(self, unique_dir: Path):
         """ process mapped_dir after we are done execing """

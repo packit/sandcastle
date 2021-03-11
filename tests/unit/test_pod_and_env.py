@@ -213,20 +213,20 @@ def test_env_image_vars(env_dict, env_image_vars):
 
 
 def test_manifest(init_openshift_deployer):
-    od: Sandcastle = init_openshift_deployer
-    assert od
+    sandcastle: Sandcastle = init_openshift_deployer
+    assert sandcastle
     KEY = "UPSTREAM_NAME"
     VALUE = "COLIN"
     expected_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {"name": od.pod_name},
+        "metadata": {"name": sandcastle.pod_name},
         "spec": {
             "automountServiceAccountToken": False,
             "containers": [
                 {
-                    "image": od.image_reference,
-                    "name": od.pod_name,
+                    "image": sandcastle.image_reference,
+                    "name": sandcastle.pod_name,
                     "env": [{"name": KEY, "value": VALUE}],
                     "imagePullPolicy": "IfNotPresent",
                     "resources": {
@@ -238,6 +238,6 @@ def test_manifest(init_openshift_deployer):
             "restartPolicy": "Never",
         },
     }
-    od.env_vars = {KEY: VALUE}
-    pod_manifest = od.create_pod_manifest()
-    assert pod_manifest == expected_manifest
+    sandcastle.env_vars = {KEY: VALUE}
+    sandcastle.set_pod_manifest()
+    assert sandcastle.pod_manifest == expected_manifest
