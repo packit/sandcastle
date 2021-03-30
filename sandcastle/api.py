@@ -308,15 +308,26 @@ class Sandcastle(object):
         :return: response from the API server
         """
         try:
-            self.api.delete_namespaced_pod(
-                self.pod_name, self.k8s_namespace_name, body=V1DeleteOptions()
-            )
+            # delete PVC first because it has a bigger prio to be deleted
+            # lingering PVCs are affecting quota
             if self.pvc:
-                self.api.delete_namespaced_persistent_volume_claim(
+                pvc_status = self.api.delete_namespaced_persistent_volume_claim(
                     self.pvc.claim_name,
                     namespace=self.k8s_namespace_name,
-                    body=V1DeleteOptions(),
+                    body=V1DeleteOptions(grace_period_seconds=0),
                 )
+                logger.debug(f"PVC deletion status = {pvc_status}")
+        except ApiException as e:
+            logger.debug(e)
+            if e.status != 404:
+                raise
+        try:
+            status = self.api.delete_namespaced_pod(
+                self.pod_name,
+                self.k8s_namespace_name,
+                body=V1DeleteOptions(grace_period_seconds=0),
+            )
+            logger.debug(f"Pod deletion status = {status}")
         except ApiException as e:
             logger.debug(e)
             if e.status != 404:
