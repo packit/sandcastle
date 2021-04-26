@@ -4,7 +4,7 @@
 
 repos:
   - repo: https://github.com/psf/black
-    rev: 20.8b1
+    rev: 21.4b0
     hooks:
       - id: black
   - repo: https://github.com/pre-commit/mirrors-prettier
@@ -23,7 +23,7 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/PyCQA/flake8
-    rev: 3.9.0
+    rev: 3.9.1
     hooks:
       - id: flake8
         args:
@@ -34,7 +34,7 @@ repos:
       - id: mypy
         args: [--no-strict-optional, --ignore-missing-imports]
   - repo: https://github.com/packit-service/pre-commit-hooks
-    rev: bec7c9ff9a985ececa53ac8078dc60ca9603f9d7
+    rev: 83d3ac601119495d984b75ad77f3bf190b03e71f
     hooks:
       - id: check-rebase
         args:
