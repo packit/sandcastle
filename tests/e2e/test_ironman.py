@@ -26,7 +26,7 @@ from tests.conftest import (
 
 
 def purge_dir_content(di: Path):
-    """ remove everything in the dir but not the dir itself """
+    """remove everything in the dir but not the dir itself"""
     dir_items = list(di.iterdir())
     if dir_items:
         print(f"Removing {di} content: {[i.name for i in dir_items]}")
@@ -482,7 +482,7 @@ def test_changing_mode(tmp_path):
     ),
 )
 def test_from_pod(test_name, kwargs):
-    """ initiate e2e: spawn a new openshift pod, from which every test case is being run """
+    """initiate e2e: spawn a new openshift pod, from which every test case is being run"""
     path = f"tests/e2e/test_ironman.py::{test_name}"
     kwargs = kwargs or {}
     run_test_within_pod(path, **kwargs)

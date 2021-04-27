@@ -475,7 +475,7 @@ class Sandcastle(object):
                 time.sleep(1)
 
     def get_logs(self) -> str:
-        """ provide logs from the pod """
+        """provide logs from the pod"""
         return self.api.read_namespaced_pod_log(
             name=self.pod_name, namespace=self.k8s_namespace_name
         )
@@ -730,7 +730,7 @@ class Sandcastle(object):
             raise
 
     def _copy_mdir_from_pod(self, unique_dir: Path):
-        """ process mapped_dir after we are done execing """
+        """process mapped_dir after we are done execing"""
         if self.mapped_dir:
             logger.debug("mapped_dir is set, let's sync the dir back and fix modes")
             self._copy_path_from_pod(

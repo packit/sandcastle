@@ -22,19 +22,19 @@
 
 
 class SandcastleException(Exception):
-    """ Something went wrong. """
+    """Something went wrong."""
 
 
 class SandcastleTimeoutReached(SandcastleException):
-    """ Timeout was reached while sandboxing """
+    """Timeout was reached while sandboxing"""
 
 
 class SandcastleExecutionError(SandcastleException):
-    """ There was an issue during sandbox execution. """
+    """There was an issue during sandbox execution."""
 
 
 class SandcastleCommandFailed(SandcastleException):
-    """ The command executed in sandbox failed. """
+    """The command executed in sandbox failed."""
 
     def __init__(self, output: str, reason: str, rc: int):
         """
