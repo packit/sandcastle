@@ -23,8 +23,6 @@
           - which
           - sed
           - gawk
-          - npm # cockpit project needs these
-          - sassc # cockpit project needs these
           - python3-docutils # for those who generates man pages from README.md
           - python3-wheel # for python projects
           - json-c-devel # \
@@ -36,6 +34,13 @@
           - rust # needed for rust-based projects
           - cargo #
           - rubygems # https://github.com/packit/packit-service/issues/771
+          # these are for cockpit
+          - npm
+          - sassc
+          - json-glib-devel
+          - gnutls-devel
+          - krb5-devel
+          - pam-devel
           # these are for anaconda
           - glib2-devel
           - gettext-devel
