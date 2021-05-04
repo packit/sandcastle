@@ -320,7 +320,7 @@ def test_user_is_set(tmp_path):
             "master",
             # this downloads megabytes of npm modules
             # and verifies we can run npm in sandcastle
-            ["make", "srpm"],
+            PACKIT_SRPM_CMD,
         ),
     ),
 )
