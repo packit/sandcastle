@@ -37,10 +37,6 @@
           # these are for cockpit
           - npm
           - sassc
-          - json-glib-devel
-          - gnutls-devel
-          - krb5-devel
-          - pam-devel
           # these are for anaconda
           - glib2-devel
           - gettext-devel
