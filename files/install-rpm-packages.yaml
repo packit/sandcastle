@@ -48,6 +48,8 @@
           - rpm-devel
           - audit-libs-devel
           - nss_wrapper
+          # so people can manipulate their upstream fmf definitions while proposing downstream
+          - fmf
         state: present
       tags:
         - basic-image
