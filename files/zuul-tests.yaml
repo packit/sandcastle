@@ -4,7 +4,7 @@
   tasks:
     - include_tasks: tasks/zuul-project-setup.yaml
     - name: Build test image
-      command: make test-image-build
+      command: make build-test-image
       args:
         chdir: "{{ project_dir }}"
       become: true

@@ -3,13 +3,14 @@
 IMAGE_NAME = quay.io/packit/sandcastle
 TEST_IMAGE_NAME = quay.io/packit/sandcastle-tests
 TEST_TARGET = ./tests
+CONTAINER_ENGINE ?= $(shell command -v podman 2> /dev/null || echo docker)
 
-test-image-build: build
-	docker build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
+build-test-image: build
+	$(CONTAINER_ENGINE) build --tag ${TEST_IMAGE_NAME} -f Dockerfile.tests .
 
 # -u to mimic openshift
-check-in-container: test-image-build
-	docker run --rm \
+check-in-container:
+	$(CONTAINER_ENGINE) run --rm \
 		--net host \
 		-v ~/.kube:/home/sandcastle/.kube:Z \
 		-u 123456789 \
@@ -20,10 +21,10 @@ check:
 	pytest-3 --color=yes --showlocals -vv $(TEST_TARGET)
 
 build:
-	docker build --tag ${IMAGE_NAME} .
+	$(CONTAINER_ENGINE) build --tag ${IMAGE_NAME} .
 
 push: build
-	docker push ${IMAGE_NAME}
+	$(CONTAINER_ENGINE) push ${IMAGE_NAME}
 
 clean:
 	find . -name '*.pyc' -delete
