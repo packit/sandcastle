@@ -4,7 +4,7 @@ Run untrusted code in a castle (OpenShift pod), which stands in a sandbox.
 
 ## Usage
 
-The prerequisite is that you're logged in an OpenShift cluster:
+The prerequisite is that you're logged into an OpenShift cluster:
 
 ```
 $ oc status
@@ -28,18 +28,18 @@ These things will happen:
 - A new pod is created, using the image set in `image_reference`.
 - The library actively waits for the pod to finish.
 - If the pod terminates with a return code greater than 0, an exception is raised.
-- Output of the command is return from the `.run()` method.
+- Output of the command is returned from the `.run()` method.
 
 ### Sharing data between sandbox and current pod
 
-This library allows you to share volumes between the pod it is running in and between sandbox.
+This library allows you to share volumes between sandbox and the pod it is running in.
 
 There is a dedicated class and an interface to access this functionality:
 
 - `VolumeSpec` class
 - `volume_mounts` kwarg of Sandcastle constructor
 
-An example is worth of thousand words:
+An example is worth a thousand words:
 
 ```python
 from pathlib import Path
@@ -70,8 +70,8 @@ rules](https://blog.openshift.com/accessing-external-services-using-egress-route
 and [network
 policy](https://docs.openshift.com/container-platform/3.6/admin_guide/managing_networking.html#admin-guide-networking-networkpolicy).
 
-When you set up this sandbox namespace, please make sure that service account
-of namespace your app is deployed in can manage pods in the sandbox namespace.
+When you set up this sandbox namespace, please make sure that the service account
+of the namespace your app is deployed in can manage pods in the sandbox namespace.
 This command should help:
 
 ```bash
@@ -102,9 +102,9 @@ o.exec(command=["ls", "-lha", f"{sandbox_mountpoint}/"])
 
 In order to develop this project (and run tests), there are several requirements which need to be met.
 
-1. Build container images using makefile target `make test-image-build`.
+1. Build container images using makefile target `make build-test-image`.
 
-2. An openshift cluster and be logged into it
+2. An openshift cluster that you are logged into
 
    Which means that running `oc status` should yield the cluster where you want
    to run the tests.
@@ -112,8 +112,8 @@ In order to develop this project (and run tests), there are several requirements
    The e2e test `test_from_pod` builds current codebase and runs the other e2e
    tests in a pod: to verify the E2E functionality. This expects that the
    openshift cluster is deployed in your current environment, meaning that
-   openshift can access your local container images in your dockerd. Otherwise the
-   image needs to be pushed somewhere so openshift can access it.
+   openshift can access your local container images in your container engine daemon.
+   Otherwise the image needs to be pushed somewhere so openshift can access it.
 
 3. In the default `oc cluster up` environment, the tests create sandbox pod
    using the default service account which is assigned to every pod. This SA
@@ -125,4 +125,5 @@ In order to develop this project (and run tests), there are several requirements
    oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
    ```
 
-4. Docker binary and docker daemon running. This is implied from the first point.
+4. Container engine binary and daemon running. This is implied from the first point.
+   NOTE: Running the tests requires either podman or docker.
