@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from shutil import rmtree
+from shutil import rmtree, copy2
 
 import pytest
 from flexmock import flexmock
@@ -458,6 +458,46 @@ def test_changing_mode(tmp_path):
     finally:
         purge_dir_content(t)
         o.delete_pod()
+
+
+def test_packit_usecase(tmp_path: Path):
+    """invoke sandcastle the same way packit invokes it"""
+    tmp_vol_name = "foobor"
+    tmp_vol_target_path = "/bort-simpson"
+    tmp_dir = tmp_path.joinpath("dir")
+    tmp_dir.mkdir()
+
+    # let's put some files in there
+    for fi in Path("/etc/systemd/").glob("*.conf"):
+        copy2(fi, tmp_dir)
+
+    md = MappedDir(
+        local_dir=tmp_path,
+        path=SANDCASTLE_MOUNTPOINT,
+        with_interim_pvc=True,
+    )
+    vols = [VolumeSpec(path=tmp_vol_target_path, volume_name=tmp_vol_name)]
+    s = Sandcastle(
+        image_reference=SANDBOX_IMAGE,
+        k8s_namespace_name=NAMESPACE,
+        mapped_dir=md,
+        volume_mounts=vols,
+    )
+    s.run()
+    try:
+        # making sure the files were correctly copied to the mapped dir
+        out = s.exec(
+            command=[
+                "bash",
+                "-c",
+                f"ls -1 {SANDCASTLE_MOUNTPOINT}/quay-io-packit-sandcastle*/dir/",
+            ]
+        )
+        # making sure we can create files in the temporary volume
+        s.exec(command=["cp", "-a", "/etc/bashrc", tmp_vol_target_path])
+    finally:
+        s.delete_pod()
+    assert "system.conf" in out
 
 
 @pytest.mark.parametrize(
