@@ -1,4 +1,4 @@
-# Sandcastle
+# Sandcastle foobar
 
 Run untrusted code in a castle (OpenShift pod), which stands in a sandbox.
 
