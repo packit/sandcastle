@@ -317,7 +317,7 @@ def test_user_is_set(tmp_path):
         ("https://github.com/packit/ogr.git", "main", PACKIT_SRPM_CMD),
         (
             "https://github.com/cockpit-project/cockpit-podman.git",
-            "master",
+            "main",
             # this downloads megabytes of npm modules
             # and verifies we can run npm in sandcastle
             PACKIT_SRPM_CMD,
