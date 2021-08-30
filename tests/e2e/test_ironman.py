@@ -101,13 +101,31 @@ def test_exec(cmd, should_fail):
         o.delete_pod()
 
 
+def test_ro_mount():
+    """test that provided volume is mounted read-only in the sandbox"""
+    p = Path("/asdqwe")
+    volume_name = "fancy-volume"
+    # by default the volume is an emptyDir PV type
+    vs = VolumeSpec(path=p, volume_name=volume_name, read_only=True)
+    o = Sandcastle(
+        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, volume_mounts=[vs]
+    )
+    o.run()
+    try:
+        with pytest.raises(SandcastleCommandFailed) as ex:
+            o.exec(command=["touch", "/asdqwe/path"])
+        assert "cannot touch '/asdqwe/path': Read-only file system" in ex.value.output
+    finally:
+        o.delete_pod()
+
+
 @pytest.mark.skipif(
     "KUBERNETES_SERVICE_HOST" not in os.environ,
     reason="Not running in a pod, skipping.",
 )
 def test_dir_sync(tmp_path):
     p = Path("/asdqwe")
-    vs = VolumeSpec(path=p, pvc_from_env="SANDCASTLE_PVC")
+    vs = VolumeSpec(path=p, pvc_from_env="SANDCASTLE_PVC", read_only=False)
 
     o = Sandcastle(
         image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, volume_mounts=[vs]
@@ -507,6 +525,7 @@ def test_packit_usecase(tmp_path: Path):
         ("test_exec_env", None),
         ("test_md_exec", None),
         ("test_run_failure", None),
+        ("test_ro_mount", None),
         ("test_dir_sync", {"with_pv_at": "/asdqwe"}),
         ("test_pod_sa_not_in_sandbox", None),
         ("test_exec_succ_pod", None),
