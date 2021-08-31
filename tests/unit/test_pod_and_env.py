@@ -104,6 +104,7 @@ def pod_json_deployed():
                         {
                             "name": "packit-sandcastle",
                             "mountPath": "/tmp/packit-sandcastle",
+                            "readOnly": False,
                         }
                     ],
                     "terminationMessagePath": "/dev/termination-log",

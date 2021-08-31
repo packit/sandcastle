@@ -118,6 +118,7 @@ class VolumeSpec:
         volume_name: str = "",
         pvc: str = "",
         pvc_from_env: str = "",
+        read_only: bool = False,
     ):
         """
         :param path: path within the sandbox where the volume is meant to be mounted
@@ -125,10 +126,12 @@ class VolumeSpec:
         :param pvc: use and existing PersistentVolumeClaim
         :param pvc_from_env: pick up pvc name from an env var;
                priority: env var > pvc kwarg
+        :param read_only: make the volume mount read only
         """
         self.name: str = volume_name
         self.path: Path = Path(path)
         self.pvc: str = pvc
+        self.read_only = read_only
         if pvc_from_env:
             self.pvc = os.getenv(pvc_from_env)
 
@@ -243,14 +246,21 @@ class Sandcastle(object):
             for vol in self.volume_mounts:
                 # local name b/w vol definition and container def
                 local_name = vol.name or clean_string(vol.pvc)
-                volume_mounts.append({"mountPath": str(vol.path), "name": local_name})
+                volume_mounts.append(
+                    {
+                        "mountPath": str(vol.path),
+                        "name": local_name,
+                        "readOnly": vol.read_only,
+                    }
+                )
                 if vol.pvc:
                     di = {
                         "name": local_name,
                         "persistentVolumeClaim": {"claimName": vol.pvc},
                     }
                 elif vol.name:
-                    # will this work actually if the volume is created up front?
+                    # if the volume is created up front, it's used then (surprise!)
+                    # if not, an emptyDir PV is used
                     di = {"name": vol.name}
                 else:
                     raise RuntimeError(
