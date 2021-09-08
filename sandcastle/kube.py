@@ -34,7 +34,7 @@ class PVC:
         path: Union[str, Path],
         claim_name: str = None,
         access_modes: List[str] = None,
-        storage_size: str = "2Gi",
+        storage_size: str = "3Gi",
     ):
         self.path = str(path)
         base = f"sandcastle-{clean_string(self.path)}-{get_timestamp_now()}"
