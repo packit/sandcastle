@@ -15,7 +15,6 @@
     description: Deploy a cluster and run tests
     pre-run:
       - files/setup-openshift.yaml
-      - files/install-test-dependencies.yaml
     extra-vars:
       with_testing: true
     run: files/zuul-tests.yaml
