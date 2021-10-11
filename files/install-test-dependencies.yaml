@@ -2,10 +2,10 @@
 - name: Install test dependencies
   hosts: all
   tasks:
-    - name: dnf install pytest & flexmock
-      dnf:
+    - name: Install pytest & flexmock
+      package:
         name:
-          - python3-pytest
-          - python3-flexmock
+          - python-pytest
+          - python-flexmock
         state: present
       become: true
