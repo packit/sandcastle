@@ -36,9 +36,7 @@
           - rubygems # https://github.com/packit/packit-service/issues/771
           # these are for cockpit
           - npm
-          - sassc
           - selinux-policy
-          - xmlto
           # these are for anaconda
           - glib2-devel
           - gettext-devel
