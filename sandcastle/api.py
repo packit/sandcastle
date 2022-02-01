@@ -352,7 +352,7 @@ class Sandcastle(object):
                 #   "message":"pods \"docker-io-usercont-sandcastle-prod-...\" is forbidden...
                 #     "code":403}
                 if "403" in exc_str:  # forbidden
-                    sleep_time = 2 ** idx
+                    sleep_time = 2**idx
                     logger.debug(f"Trying again in {sleep_time}s")
                     time.sleep(sleep_time)
                 else:
