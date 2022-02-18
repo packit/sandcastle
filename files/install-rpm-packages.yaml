@@ -28,6 +28,7 @@
           - json-c-devel # \
           - systemd-devel # https://github.com/Scribery/tlog/pull/274
           - libcurl-devel # /
+          - python3-setuptools_scm # ansible-lint
           - python3-zanata-client # for those who use zanata for localization
           - python2 # https://github.com/packit-service/sandcastle/issues/49
           - python2-setuptools # /
