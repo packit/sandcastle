@@ -30,8 +30,6 @@
           - libcurl-devel # /
           - python3-setuptools_scm # ansible-lint
           - python3-zanata-client # for those who use zanata for localization
-          - python2 # https://github.com/packit-service/sandcastle/issues/49
-          - python2-setuptools # /
           - rust # needed for rust-based projects
           - cargo #
           - rubygems # https://github.com/packit/packit-service/issues/771
