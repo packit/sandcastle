@@ -36,6 +36,7 @@
           # these are for cockpit
           - npm
           - selinux-policy
+          - xmlto
           # these are for anaconda
           - glib2-devel
           - gettext-devel
