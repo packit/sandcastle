@@ -43,5 +43,5 @@ repos:
     hooks:
       - id: check-rebase
         args:
-          - git://github.com/packit/sandcastle.git
+          - https://github.com/packit/sandcastle.git
         stages: [manual, push]
