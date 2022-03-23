@@ -21,7 +21,6 @@ from tests.conftest import (
     NAMESPACE,
     run_test_within_pod,
     SANDCASTLE_MOUNTPOINT,
-    PACKIT_SRPM_CMD,
 )
 
 
@@ -324,54 +323,6 @@ def test_user_is_set(tmp_path):
         o.delete_pod()
 
 
-@pytest.mark.parametrize(
-    "git_url,branch,command",
-    (
-        (
-            "https://github.com/packit/hello-world.git",
-            "main",
-            PACKIT_SRPM_CMD,
-        ),
-        ("https://github.com/packit/ogr.git", "main", PACKIT_SRPM_CMD),
-        (
-            "https://github.com/cockpit-project/cockpit-podman.git",
-            "main",
-            # this downloads megabytes of npm modules
-            # and verifies we can run npm in sandcastle
-            PACKIT_SRPM_CMD,
-        ),
-    ),
-)
-def test_md_e2e(tmp_path, git_url, branch, command):
-    # running in k8s
-    if "KUBERNETES_SERVICE_HOST" in os.environ:
-        t = Path(SANDCASTLE_MOUNTPOINT, f"clone-{get_timestamp_now()}")
-    else:
-        t = tmp_path
-    m_dir = MappedDir(t, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
-
-    run_command(["git", "clone", "-b", branch, git_url, t])
-
-    o = Sandcastle(
-        image_reference=SANDBOX_IMAGE, k8s_namespace_name=NAMESPACE, mapped_dir=m_dir
-    )
-    o.run()
-    try:
-        output = o.exec(command=command)
-        print(output)
-        assert list(t.glob("*.src.rpm"))
-        o.exec(command=["packit", "--help"])
-
-        with pytest.raises(SandcastleCommandFailed) as ex:
-            o.exec(command=["bash", "-c", "echo 'I quit!'; exit 120"])
-        e = ex.value
-        assert "I quit!" in e.output
-        assert 120 == e.rc
-        assert "command terminated with non-zero exit code" in e.reason
-    finally:
-        o.delete_pod()
-
-
 def test_md_new_namespace(tmp_path):
     m_dir = MappedDir(tmp_path, SANDCASTLE_MOUNTPOINT, with_interim_pvc=True)
 
@@ -532,7 +483,6 @@ def test_packit_usecase(tmp_path: Path):
         ("test_timeout", None),
         ("test_md_multiple_exec", None),
         ("test_file_got_changed", None),
-        ("test_md_e2e", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
         ("test_lost_found_is_ignored", None),
         ("test_md_new_namespace", {"new_namespace": True}),
         ("test_changing_mode", {"with_pv_at": SANDCASTLE_MOUNTPOINT}),
