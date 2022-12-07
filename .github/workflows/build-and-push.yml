@@ -17,7 +17,7 @@ jobs:
             image: sandcastle
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Extract branch name and set tag
         shell: bash
@@ -32,8 +32,9 @@ jobs:
                   tag="prod"
                   ;;
           esac
-          echo "::set-output name=branch::$branch"
-          echo "::set-output name=tag::$tag"
+          echo "branch=${branch}" >> $GITHUB_OUTPUT
+          unique_tag="${branch}-${GITHUB_SHA::7}"
+          echo "tag=${tag} ${unique_tag}" >> $GITHUB_OUTPUT
         id: branch_tag
 
       - name: Build Image
