@@ -63,21 +63,25 @@
           - python3-setuptools
           - python3-setuptools_scm
           - python3-setuptools_scm_git_archive
-          - origin-clients # oc cp
           - python3-pytest # tests
           - python3-flexmock
         state: present
       tags:
         - with-sandcastle-deps
-    - name: Install kubernetes client
+    - name: Install Python client for kubernetes
       pip:
-        executable: /usr/bin/pip3
         name: kubernetes==12.0.1
+      tags:
+        - with-sandcastle-deps
+    - name: Install OKD CLI (oc)
+      ansible.builtin.unarchive:
+        src: https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
+        remote_src: yes
+        dest: /usr/bin/
       tags:
         - with-sandcastle-deps
     - name: Install tests requirements
       pip:
-        executable: /usr/bin/pip3
         requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
       tags:
         - with-sandcastle-deps
