@@ -3,7 +3,7 @@
   hosts: all
   tasks:
     - name: Install basic utilities which should be in a sandbox.
-      dnf:
+      ansible.builtin.dnf:
         name:
           - rsync # oc rsync worker:/sandcastle <-> sandcastle-pod
           - make
@@ -54,7 +54,7 @@
       tags:
         - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
-      dnf:
+      ansible.builtin.dnf:
         name:
           - git-core
           - python3-devel
@@ -69,19 +69,19 @@
       tags:
         - with-sandcastle-deps
     - name: Install Python client for kubernetes
-      pip:
+      ansible.builtin.pip:
         name: kubernetes==12.0.1
       tags:
         - with-sandcastle-deps
     - name: Install OKD CLI (oc)
       ansible.builtin.unarchive:
         src: https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
-        remote_src: yes
+        remote_src: true
         dest: /usr/bin/
       tags:
         - with-sandcastle-deps
     - name: Install tests requirements
-      pip:
+      ansible.builtin.pip:
         requirements: "{{ lookup('env','PWD') }}/tests/requirements.txt"
       tags:
         - with-sandcastle-deps

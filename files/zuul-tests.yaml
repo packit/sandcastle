@@ -4,12 +4,12 @@
   tasks:
     - include_tasks: tasks/zuul-project-setup.yaml
     - name: Build test image
-      command: make build-test-image
+      ansible.builtin.command: make build-test-image
       args:
         chdir: "{{ project_dir }}"
       become: true
     - name: Run tests
-      command: make check-in-container
+      ansible.builtin.command: make check-in-container
       args:
         chdir: "{{ project_dir }}"
       become: true

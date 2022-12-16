@@ -4,10 +4,10 @@
   tasks:
     # https://github.com/packit-service/sandcastle#developing-sandcastle
     - name: Add permissions for service account
-      command: oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
+      ansible.builtin.command: oc adm policy add-role-to-user edit system:serviceaccount:myproject:default
       become: true
     - name: grant everyone access to {{ item }} so we can use it inside test container
-      file:
+      ansible.builtin.file:
         path: "{{ item }}"
         mode: "0775"
       loop:
