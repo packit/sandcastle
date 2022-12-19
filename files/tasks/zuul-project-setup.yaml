@@ -1,22 +1,22 @@
 ---
-- set_fact:
+- ansible.builtin.set_fact:
     project_dir: "{{ playbook_dir }}/.."
-- set_fact:
+- ansible.builtin.set_fact:
     project_dir: "{{ ansible_user_dir }}/{{ zuul.project.src_dir }}"
   when: zuul is defined
-- name: stat {{ project_dir }}
-  stat:
+- name: Stat {{ project_dir }}
+  ansible.builtin.stat:
     path: "{{ project_dir }}"
   tags:
     - no-cache
   register: src_path
-- name: Let's make sure {{ project_dir }} is present
-  assert:
+- name: Make sure project_dir is present
+  ansible.builtin.assert:
     that:
       - "src_path.stat.isdir"
-- name: check ~/.kube/config
-  stat:
+- name: Check ~/.kube/config
+  ansible.builtin.stat:
     path: ~/.kube/config
   register: kube_config_stat
-- debug:
+- ansible.builtin.debug:
     var: kube_config_stat
