@@ -2,7 +2,7 @@
 # It should contain basic utilities, such as git, make, rpmbuild, etc.
 FROM quay.io/packit/base
 
-ENV LC_ALL=C \
+ENV LC_ALL=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=yes \
     USER=sandcastle \
     HOME=/home/sandcastle
