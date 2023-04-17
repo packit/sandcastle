@@ -615,7 +615,6 @@ class Sandcastle(object):
                 elif status == "Failure":
                     logger.info("exec command failed")
                     logger.debug(j)
-                    logger.info(f"output:\n{response}")
                     # the timeout could have been reached here which means
                     # the pod is not running, so we are not able `oc rsync` things from inside:
                     # we won't be needing the data any more since p-s halts execution
