@@ -51,6 +51,7 @@
           # so people can manipulate their upstream fmf definitions while proposing downstream
           - fmf
         state: present
+        install_weak_deps: False
       tags:
         - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
