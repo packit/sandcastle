@@ -18,7 +18,6 @@
           - meson
           - ninja-build
           - wget
-          - curl
           - findutils
           - which
           - sed
@@ -42,7 +41,6 @@
           - gettext-devel
           - python3-polib
           - gobject-introspection-devel
-          - golist # podman
           - glade-devel
           - libxklavier-devel
           - libarchive-devel
@@ -66,7 +64,7 @@
           - python3-setuptools_scm
           - python3-setuptools_scm_git_archive
           - python3-pytest # tests
-          - python3-flexmock
+        #          - python3-flexmock  # RHBZ#2120251
         state: present
       tags:
         - with-sandcastle-deps
