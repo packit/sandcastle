@@ -42,7 +42,6 @@
           - gettext-devel
           - python3-polib
           - gobject-introspection-devel
-          - golist # podman
           - glade-devel
           - libxklavier-devel
           - libarchive-devel
