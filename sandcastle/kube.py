@@ -31,7 +31,20 @@ class PVC:
             "spec": {
                 "accessModes": self.access_modes,
                 "resources": {"requests": {"storage": self.storage_size}},
+                # aws-ebs is managed by us, costs less, smaller throughput
+                # aws-efs* is managed by AWS, is faster
+                "storageClassName": "aws-ebs",
             },
             "apiVersion": "v1",
-            "metadata": {"name": self.claim_name},
+            "metadata": {
+                "name": self.claim_name,
+                "annotations": {
+                    # after deleting »the PVC«, the data are deleted
+                    "kubernetes.io/reclaimPolicy": "Delete",
+                },
+                "labels": {
+                    # TODO: adjust after deploying the prod if need be…
+                    "paas.redhat.com/appcode": "PCKT-002",
+                },
+            },
         }
