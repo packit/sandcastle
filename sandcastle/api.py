@@ -130,14 +130,15 @@ class Sandcastle(object):
         mapped_dir: Optional[MappedDir] = None,
     ):
         """
-        :param image_reference: the pod will use this image
-        :param k8s_namespace_name: name of the namespace to deploy into
-        :param env_vars: additional environment variables to set in the pod
-        :param pod_name: name the pod like this, if not specified, generate something long and ugly
-        :param working_dir: path within the pod where we run commands by default
-        :param service_account_name: run the pod using this service account
-        :param volume_mounts: set these volume mounts in the sandbox
-        :param mapped_dir, a mapping between a local dir which should be copied
+        Args:
+            image_reference: the pod will use this image
+            k8s_namespace_name: name of the namespace to deploy into
+            env_vars: additional environment variables to set in the pod
+            pod_name: name the pod like this, if not specified, generate something long and ugly
+            working_dir: path within the pod where we run commands by default
+            service_account_name: run the pod using this service account
+            volume_mounts: set these volume mounts in the sandbox
+            mapped_dir: a mapping between a local dir which should be copied
                to the sandbox, and then copied back once all the work is done
                when this is set, working_dir args is being ignored and sandcastle invokes
                all exec commands in the working dir of the mapped dir
