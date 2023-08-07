@@ -128,19 +128,24 @@ class Sandcastle(object):
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
         mapped_dir: Optional[MappedDir] = None,
+        appcode: Optional[str] = None,
+        storage_class: Optional[str] = None,
     ):
         """
-        :param image_reference: the pod will use this image
-        :param k8s_namespace_name: name of the namespace to deploy into
-        :param env_vars: additional environment variables to set in the pod
-        :param pod_name: name the pod like this, if not specified, generate something long and ugly
-        :param working_dir: path within the pod where we run commands by default
-        :param service_account_name: run the pod using this service account
-        :param volume_mounts: set these volume mounts in the sandbox
-        :param mapped_dir, a mapping between a local dir which should be copied
+        Args:
+            image_reference: the pod will use this image
+            k8s_namespace_name: name of the namespace to deploy into
+            env_vars: additional environment variables to set in the pod
+            pod_name: name the pod like this, if not specified, generate something long and ugly
+            working_dir: path within the pod where we run commands by default
+            service_account_name: run the pod using this service account
+            volume_mounts: set these volume mounts in the sandbox
+            mapped_dir: a mapping between a local dir which should be copied
                to the sandbox, and then copied back once all the work is done
                when this is set, working_dir args is being ignored and sandcastle invokes
                all exec commands in the working dir of the mapped dir
+            appcode: ‹paas.redhat.com› appcode that must be defined when requesting PVCs
+            storage_class: explicit storage class to be requested for the PVCs
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
@@ -161,6 +166,9 @@ class Sandcastle(object):
         self.mapped_dir: MappedDir = mapped_dir
         self.pvc: Optional[PVC] = None
         self.pod_manifest: Dict = {}
+
+        self.appcode = appcode
+        self.storage_class = storage_class
 
     # TODO: refactor into a pod class
     def set_pod_manifest(self, command: Optional[List] = None):
@@ -196,7 +204,12 @@ class Sandcastle(object):
         self.pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
-            "metadata": {"name": self.pod_name},
+            "metadata": {
+                "name": self.pod_name,
+                "labels": {
+                    "paas.redhat.com/appcode": self.appcode,
+                },
+            },
             "spec": spec,
         }
         if self.working_dir:
@@ -207,7 +220,11 @@ class Sandcastle(object):
             spec["serviceAccountName"] = self.service_account_name
 
         if self.mapped_dir and self.mapped_dir.with_interim_pvc:
-            self.pvc = PVC(path=self.mapped_dir.path)
+            self.pvc = PVC(
+                path=self.mapped_dir.path,
+                storage_class=self.storage_class,
+                appcode=self.appcode,
+            )
             self.api.create_namespaced_persistent_volume_claim(
                 namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
             )
