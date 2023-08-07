@@ -203,7 +203,10 @@ def test_manifest(init_openshift_deployer):
     expected_manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {"name": sandcastle.pod_name},
+        "metadata": {
+            "name": sandcastle.pod_name,
+            "labels": {"paas.redhat.com/appcode": None},
+        },
         "spec": {
             "automountServiceAccountToken": False,
             "containers": [
