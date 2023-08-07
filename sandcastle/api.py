@@ -128,6 +128,8 @@ class Sandcastle(object):
         service_account_name: Optional[str] = None,
         volume_mounts: Optional[List[VolumeSpec]] = None,
         mapped_dir: Optional[MappedDir] = None,
+        appcode: Optional[str] = None,
+        storage_class: Optional[str] = None,
     ):
         """
         Args:
@@ -142,6 +144,8 @@ class Sandcastle(object):
                to the sandbox, and then copied back once all the work is done
                when this is set, working_dir args is being ignored and sandcastle invokes
                all exec commands in the working dir of the mapped dir
+            appcode: ‹paas.redhat.com› appcode that must be defined when requesting PVCs
+            storage_class: explicit storage class to be requested for the PVCs
         """
         self.image_reference: str = image_reference
         self.service_account_name: Optional[str] = service_account_name
@@ -162,6 +166,9 @@ class Sandcastle(object):
         self.mapped_dir: MappedDir = mapped_dir
         self.pvc: Optional[PVC] = None
         self.pod_manifest: Dict = {}
+
+        self.appcode = appcode
+        self.storage_class = storage_class
 
     # TODO: refactor into a pod class
     def set_pod_manifest(self, command: Optional[List] = None):
@@ -197,7 +204,12 @@ class Sandcastle(object):
         self.pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
-            "metadata": {"name": self.pod_name},
+            "metadata": {
+                "name": self.pod_name,
+                "labels": {
+                    "paas.redhat.com/appcode": self.appcode,
+                },
+            },
             "spec": spec,
         }
         if self.working_dir:
@@ -208,7 +220,11 @@ class Sandcastle(object):
             spec["serviceAccountName"] = self.service_account_name
 
         if self.mapped_dir and self.mapped_dir.with_interim_pvc:
-            self.pvc = PVC(path=self.mapped_dir.path)
+            self.pvc = PVC(
+                path=self.mapped_dir.path,
+                storage_class=self.storage_class,
+                appcode=self.appcode,
+            )
             self.api.create_namespaced_persistent_volume_claim(
                 namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
             )
