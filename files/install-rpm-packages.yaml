@@ -49,6 +49,8 @@
           - nss_wrapper
           # so people can manipulate their upstream fmf definitions while proposing downstream
           - fmf
+          # these are for node modules, requested for jowl
+          - nodejs-packaging-bundler
         state: present
         install_weak_deps: False
       tags:
