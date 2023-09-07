@@ -2,25 +2,54 @@
 # SPDX-License-Identifier: MIT
 
 """
-# Design
+# Sandcastle design
 
-## Volumes
+Run commands in transient OpenShift pods. Check main README.md
+for high-level description. This is code, let's delve into the details.
 
-Our team have met to discuss volumes and sharing data b/w containers & pods.
-We came up with these solutions:
+As we only use the .exec() workflow in Packit, let's focus on that one.
 
-* claim - utilize persistent volume claim feature of k8s: let pods claim volumes
-  and then attach the claimed volume to sandbox pod
+## Overview
 
-* `oc cp` - copy data using the `cp` command: very simple (alternatively,
-  run rsync server in the sandbox) -- this is problematic because oc-cp
-  is implemented using tar and you need to take care of source and destination
-  paths - if they exist, tar complains; there is also a problem that you
-  can't use workingDir in pod, because the path with the data likely
-  does not exist yet
+1. Spawn a pod using .run()
+2. Put provided command in a bash script file inside _prepare_exec
+3. Place it inside the sandbox pod so it can be executed
+4. Perform exec using websockets and produce a websocket client to speak with k8s API
+5. Process output
+6. If MappedDir is used, copy in/out the files as we go
 
-* controller pod - dynamically create and deploy pods
-  with volumes - very flexible, pretty complex
+### Why the script file?
+
+It's easier to debug, otherwise we would need to send the provided command,
+wrapped in several layers. With the script file, we know exactly what was
+run inside, it's easy to read and reproduce. Then the exec command
+is just `bash $the_script_file`.
+
+### Why mapped dir & interim_pvc?
+
+Not all openshift clusters support RWX PVs - share one volume with multiple
+pods read/write. Hence, we're stuck with `oc rsync` the content between the pods.
+We need the interim PV inside sandcastle to fit large amounts of data. Pod's
+rootfs is read only, and we certainly don't want to write to /tmp so we don't
+waste pod's memory, some commands may need it (hi nodejs and git-clone kernel).
+
+### run()
+
+The main readme.md has this example:
+
+    s = Sandcastle(...)
+    output = s.run(command=["ls", "-lha"])
+
+It is great to demonstrate the functionality but in practice no one would use it.
+
+The main value of sandcastle is data: you always run commands together with
+runtime directory structure (in Packit's case, git repo). Here, if you can have
+an RWX volume that could be shared between your app pod and sandcastle pod, you need
+to copy the data. And here's the problem: the data needs to be copied inside first
+and then the command run which can never work when you create the pod using your
+command - the data won't be there as the command is executed. So it always needs to be
+exec: create the pod with `sleep infinity` and exec commands on the fly, copy data
+in before a command is run, copy our after it finishes.
 """
 
 import json
@@ -67,7 +96,7 @@ logger = logging.getLogger(__name__)
 
 class MappedDir:
     """
-    Copy local directory to the pod using `oc cp`
+    Copy local directory to the pod using `oc rsync`
     """
 
     def __init__(
@@ -534,7 +563,8 @@ class Sandcastle(object):
         cwd: Union[str, Path] = None,
     ) -> Tuple[Path, Path]:
         """
-        wrap a command for exec into a script file and place it to sandbox
+        Wrap a command for exec into a script file and place it to the sandbox pod.
+        The script file is then invoked using `bash $the_script_file` in the exec method.
 
         :param command: command to wrap
         :param target_dir: a dir in the sandbox where the script is supposed to be copied
