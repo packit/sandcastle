@@ -77,6 +77,7 @@ from sandcastle.constants import (
     WEBSOCKET_CALL_TIMEOUT,
     RETRY_INIT_WS_CLIENT_MAX,
     RETRY_CREATE_POD_MAX,
+    SANDCASTLE_EXEC_DIR,
 )
 from sandcastle.exceptions import (
     SandcastleCommandFailed,
@@ -577,7 +578,7 @@ class Sandcastle(object):
 
         root_target_dir = Path(target_dir or self._do_exec(["mktemp", "-d"]).strip())
         # this is where the content of mapped_dir will be
-        unique_dir = root_target_dir / self.pod_name
+        unique_dir = root_target_dir / SANDCASTLE_EXEC_DIR
         script_name = "script.sh"
 
         # set -e - fail the script when a command fails
