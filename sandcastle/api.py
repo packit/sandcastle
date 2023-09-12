@@ -185,6 +185,9 @@ class Sandcastle(object):
 
         # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?
         self.cleaned_name = clean_string(image_reference)
+        # make room for the timestamp (26 chars)
+        # the pod name can not be longer than 63 chars
+        self.cleaned_name = self.cleaned_name[-(63 - 26) :]  # noqa
         self.pod_name = pod_name or f"{self.cleaned_name}-{get_timestamp_now()}"
 
         self.working_dir = working_dir
