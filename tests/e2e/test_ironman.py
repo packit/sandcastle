@@ -16,6 +16,7 @@ from sandcastle import (
 )
 from sandcastle.exceptions import SandcastleCommandFailed
 from sandcastle.utils import run_command, get_timestamp_now
+from sandcastle.constants import SANDCASTLE_EXEC_DIR
 from tests.conftest import (
     SANDBOX_IMAGE,
     NAMESPACE,
@@ -459,7 +460,7 @@ def test_packit_usecase(tmp_path: Path):
             command=[
                 "bash",
                 "-c",
-                f"ls -1 {SANDCASTLE_MOUNTPOINT}/quay-io-packit-sandcastle*/dir/",
+                f"ls -1 {SANDCASTLE_MOUNTPOINT}/{SANDCASTLE_EXEC_DIR}/dir",
             ]
         )
         # making sure we can create files in the temporary volume
