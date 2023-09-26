@@ -51,6 +51,9 @@
           - fmf
           # these are for node modules, requested for jowl
           - nodejs-packaging-bundler
+          # for python projects using hatch-vcs
+          - hatch
+          - python3-hatch-vcs
         state: present
         install_weak_deps: False
       tags:
