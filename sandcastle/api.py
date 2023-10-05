@@ -211,7 +211,7 @@ class Sandcastle(object):
             "image": self.image_reference,
             "name": self.pod_name,
             "env": env_image_vars,
-            "imagePullPolicy": "IfNotPresent",
+            "imagePullPolicy": "Always",
             # we may be tempted to enable tty in the pod to get pretty terminal output
             # but it's not as simple as that, for example
             # npm loves to make beautiful terminal output full of colors and sunshine

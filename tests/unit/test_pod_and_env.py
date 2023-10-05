@@ -214,7 +214,7 @@ def test_manifest(init_openshift_deployer):
                     "image": sandcastle.image_reference,
                     "name": sandcastle.pod_name,
                     "env": [{"name": KEY, "value": VALUE}],
-                    "imagePullPolicy": "IfNotPresent",
+                    "imagePullPolicy": "Always",
                     "resources": {
                         "limits": {"memory": "768Mi"},
                         "requests": {"memory": "512Mi"},
