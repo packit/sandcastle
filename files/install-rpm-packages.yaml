@@ -58,6 +58,11 @@
         install_weak_deps: False
       tags:
         - basic-image
+    - name: Install python-build that is not packaged for EL9.
+      ansible.builtin.pip:
+        name: build
+      tags:
+        - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
       ansible.builtin.dnf:
         name:
