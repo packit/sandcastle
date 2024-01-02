@@ -6,14 +6,18 @@ ENV PYTHONDONTWRITEBYTECODE=yes \
     USER=sandcastle \
     HOME=/home/sandcastle
 
-WORKDIR ${HOME}
-# So the arbitrary user ID can access it.
-RUN chmod g+rwX .
-
 COPY files/install-rpm-packages.yaml ./
 RUN ansible-playbook -vv -c local -t basic-image -i localhost, install-rpm-packages.yaml \
     && dnf clean all
 
+WORKDIR ${HOME}
+# So the arbitrary user ID can access it.
+RUN chmod g+rwX .
+
 COPY files/container-cmd.sh files/setup_env_in_openshift.sh ./
+
+# wipe the mess from Ansible and Python…
+RUN rm -rf ./.cache ./.ansible
+
 # default command is sleep - so users can do .exec(command=[...])
 CMD ["./container-cmd.sh"]
