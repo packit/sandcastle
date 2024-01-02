@@ -15,5 +15,9 @@ WORKDIR ${HOME}
 RUN chmod g+rwX .
 
 COPY files/container-cmd.sh files/setup_env_in_openshift.sh ./
+
+# wipe the mess from Ansible and Python…
+RUN rm -rf ./.cache ./.ansible
+
 # default command is sleep - so users can do .exec(command=[...])
 CMD ["./container-cmd.sh"]
