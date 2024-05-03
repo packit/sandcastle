@@ -235,6 +235,7 @@ class Sandcastle(object):
             "automountServiceAccountToken": False,
             # [NOTE] 1800s which is the default time out + 600s for the provisioning
             "completionDeadlineSeconds": 1800 + 600,
+            "activeDeadlineSeconds": 1800 + 600,
         }
         self.pod_manifest = {
             "apiVersion": "v1",

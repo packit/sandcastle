@@ -223,6 +223,7 @@ def test_manifest(init_openshift_deployer):
             ],
             "restartPolicy": "Never",
             "completionDeadlineSeconds": 1800 + 600,
+            "activeDeadlineSeconds": 1800 + 600,
         },
     }
     sandcastle.env_vars = {KEY: VALUE}
