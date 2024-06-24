@@ -29,9 +29,11 @@
           - libcurl-devel # /
           - python3-setuptools_scm # ansible-lint
           - python3-zanata-client # for those who use zanata for localization
-          - rust # needed for rust-based projects
-          - cargo #
           - rubygems # https://github.com/packit/packit-service/issues/771
+          # needed for rust-based projects
+          - rust
+          - cargo
+          - cargo2rpm
           # these are for cockpit
           - npm
           - selinux-policy
@@ -54,6 +56,8 @@
           # for python projects using hatch-vcs
           - hatch
           - python3-hatch-vcs
+          # for rust2rpm
+          - python3.11-pip
         state: present
         install_weak_deps: False
       tags:
@@ -61,6 +65,13 @@
     - name: Install python-build that is not packaged for EL9.
       ansible.builtin.pip:
         name: build
+      tags:
+        - basic-image
+    - name: Install rust2rpm that is not packaged for EL9.
+      ansible.builtin.pip:
+        name: git+https://pagure.io/fedora-rust/rust2rpm.git
+        # cargo2rpm is built for Python 3.11
+        executable: pip3.11
       tags:
         - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
