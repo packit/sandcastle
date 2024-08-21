@@ -58,6 +58,9 @@
           - python3-hatch-vcs
           # for rust2rpm
           - python3.11-pip
+          # for go-vendor-tools
+          - trivy
+          - askalono-cli
         state: present
         install_weak_deps: False
       tags:
@@ -72,6 +75,11 @@
         name: git+https://pagure.io/fedora-rust/rust2rpm.git
         # cargo2rpm is built for Python 3.11
         executable: pip3.11
+      tags:
+        - basic-image
+    - name: Install go-vendor-tools that is not packaged for EL9.
+      ansible.builtin.pip:
+        name: go-vendor-tools
       tags:
         - basic-image
     - name: Install all RPM packages needed to hack on sandcastle.
