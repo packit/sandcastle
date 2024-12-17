@@ -61,6 +61,7 @@
           # for go-vendor-tools
           - trivy
           - askalono-cli
+          - golang
         state: present
         install_weak_deps: False
       tags:
