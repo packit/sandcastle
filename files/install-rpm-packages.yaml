@@ -55,8 +55,6 @@
           # for python projects using hatch-vcs
           - hatch
           - python3-hatch-vcs
-          # for rust2rpm
-          - python3.11-pip
           # for go-vendor-tools
           - trivy
           - askalono-cli
@@ -70,13 +68,32 @@
         name: build
       tags:
         - basic-image
-    - name: Install rust2rpm that is not packaged for EL9.
-      ansible.builtin.pip:
-        name: git+https://pagure.io/fedora-rust/rust2rpm.git
-        # cargo2rpm is built for Python 3.11
-        executable: pip3.11
+
+    - name: Install ‹rust2rpm› on CentOS Stream 9
+      block:
+        - name: Install ‹pip› of Python 3.11
+          ansible.builtin.dnf:
+            name: python3.11-pip
+            state: present
+            install_weak_deps: False
+        - name: Install rust2rpm that is not packaged for EL9.
+          ansible.builtin.pip:
+            name: git+https://pagure.io/fedora-rust/rust2rpm.git
+            # cargo2rpm is built for Python 3.11 (CentOS Stream 9)
+            executable: pip3.11
       tags:
         - basic-image
+      when: ansible_distribution == "CentOS"
+
+    - name: Install ‹rust2rpm› on Fedora
+      ansible.builtin.dnf:
+        name: rust2rpm
+        state: present
+        install_weak_deps: False
+      tags:
+        - basic-image
+      when: ansible_distribution == "Fedora"
+
     - name: Install go-vendor-tools that is not packaged for EL9.
       ansible.builtin.pip:
         name: go-vendor-tools
