@@ -1,6 +1,6 @@
 # This is the default sandbox container image to run untrusted commands.
 # It should contain basic utilities, such as git, make, rpmbuild, etc.
-FROM quay.io/packit/base:c9s
+FROM quay.io/packit/base:fedora
 
 ENV PYTHONDONTWRITEBYTECODE=yes \
     USER=sandcastle \
