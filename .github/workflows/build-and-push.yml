@@ -23,42 +23,25 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Extract branch name and set tag when triggered via push
-        if: "!github.event.schedule"
         shell: bash
         run: |
           branch=${GITHUB_REF#refs/heads/}
-          tag=""
-          case $branch in
-              main)
-                  tag="stg latest"
-                  ;;
-              stable)
-                  tag="prod"
-                  ;;
-          esac
           unique_tag="${branch}-${GITHUB_SHA::7}"
+
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            tag="prod stg latest"
+          else
+            tag=""
+            case $branch in
+                main)   tag="stg latest" ;;
+                stable) tag="prod"       ;;
+            esac
+          fi
 
           echo "branch=${branch}" >> $GITHUB_OUTPUT
           echo "tag=${tag} ${unique_tag}" >> $GITHUB_OUTPUT
 
-        id: branch_tag_push
-
-      - name: Extract branch name and set tags when triggered via schedule
-        if: github.event.schedule
-        shell: bash
-        run: |
-          # Do not rely on hard-coded `main`
-          branch=${GITHUB_REF#refs/heads/}
-
-          # Set all tags during periodic rebuild
-          tag="prod stg latest"
-          unique_tag="${branch}-${GITHUB_SHA::7}"
-
-          # Propagate changes to outputs
-          echo "branch=${branch}" >> $GITHUB_OUTPUT
-          echo "tag=${tag} ${unique_tag}" >> $GITHUB_OUTPUT
-
-        id: branch_tag_schedule
+        id: branch_tag
 
       - name: Build Image
         id: build-image
