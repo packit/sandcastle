@@ -225,8 +225,8 @@ class Sandcastle(object):
                 # git-clone needs a lot of memory
                 # nodejs is hungry, especially when npm compiles stuff
                 # https://developer.ibm.com/languages/node-js/articles/nodejs-memory-management-in-container-environments/#
-                "limits": {"memory": "768Mi"},
-                "requests": {"memory": "512Mi"},
+                "limits": {"memory": "768Mi", "cpu": "1000m"},
+                "requests": {"memory": "512Mi", "cpu": "50m"},
             },
         }
         spec = {
