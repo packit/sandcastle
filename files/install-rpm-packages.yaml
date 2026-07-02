@@ -8,6 +8,7 @@
           - rsync # oc rsync worker:/sandcastle <-> sandcastle-pod
           - make
           - git-core
+          - gnome-srpm-macros
           - packit
           - rpmdevtools
           - automake
