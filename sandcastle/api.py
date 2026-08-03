@@ -261,9 +261,20 @@ class Sandcastle(object):
                 storage_class=self.storage_class,
                 appcode=self.appcode,
             )
-            self.api.create_namespaced_persistent_volume_claim(
-                namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
-            )
+            try:
+                self.api.create_namespaced_persistent_volume_claim(
+                    namespace=self.k8s_namespace_name, body=self.pvc.to_dict()
+                )
+            except ApiException as e:
+                claim_name = self.pvc.claim_name
+                # prevent delete_pod() from trying to delete a PVC that was never created
+                self.pvc = None
+                raise SandcastleException(
+                    f"Failed to create PVC {claim_name!r} "
+                    f"in namespace {self.k8s_namespace_name!r}: {e.reason} "
+                    f"(HTTP {e.status}). "
+                    f"This is likely caused by a PVC quota being exceeded."
+                ) from e
             self.volume_mounts.append(
                 VolumeSpec(
                     path=self.pvc.path,
