@@ -110,7 +110,7 @@
         name:
           - go-vendor-tools+all
           - go-vendor-tools+scancode
-          - python3dist(zstarfile[all])
+          - python3-zstarfile+all
       tags:
         - basic-image
       when: ansible_distribution == "Fedora"
