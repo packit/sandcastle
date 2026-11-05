@@ -216,8 +216,8 @@ def test_manifest(init_openshift_deployer):
                     "env": [{"name": KEY, "value": VALUE}],
                     "imagePullPolicy": "Always",
                     "resources": {
-                        "limits": {"memory": "768Mi"},
-                        "requests": {"memory": "512Mi"},
+                        "limits": {"memory": "2Gi", "cpu": "1000m"},
+                        "requests": {"memory": "512Mi", "cpu": "50m"},
                     },
                 }
             ],
