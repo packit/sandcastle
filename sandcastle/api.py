@@ -59,7 +59,7 @@ import shlex
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, NamedTuple, Optional, Union, Tuple
 
 from kubernetes.client import (
     V1DeleteOptions,
@@ -71,7 +71,12 @@ from kubernetes.client import (
 from kubernetes.client.rest import ApiException
 from kubernetes.config import load_incluster_config, load_kube_config
 from kubernetes.stream import stream
-from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient
+from kubernetes.stream.ws_client import (
+    ERROR_CHANNEL,
+    STDERR_CHANNEL,
+    STDOUT_CHANNEL,
+    WSClient,
+)
 
 from sandcastle.constants import (
     WEBSOCKET_CALL_TIMEOUT,
@@ -93,6 +98,13 @@ from sandcastle.utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class SandcastleCommandOutput(NamedTuple):
+    """Standard output and standard error from a successful command."""
+
+    stdout: str
+    stderr: str
 
 
 class MappedDir:
@@ -621,20 +633,21 @@ class Sandcastle(object):
         target_script_path = root_target_dir / script_name
         return unique_dir, target_script_path
 
-    def exec(
+    def _exec_with_output(
         self,
         command: List[str],
         env: Optional[Dict] = None,
         cwd: Union[str, Path] = None,
-    ) -> str:
+        combine_output: bool = False,
+    ) -> SandcastleCommandOutput:
         """
-        exec a command in a running pod
+        execute a command in a running pod and preserve its output streams
 
         :param command: command to run
         :param env: a Dict with env vars to set for the exec'd command
         :param cwd: run the command in this subdirectory of a mapped dir,
                defaults to a mapped dir or a temporary directory if mapped_dir is not set
-        :returns logs
+        :returns stdout and stderr
         """
         if not self.mapped_dir and cwd:
             raise SandcastleException(
@@ -662,14 +675,29 @@ class Sandcastle(object):
         try:
             # https://github.com/packit-service/sandcastle/issues/23
             # even with a >0 number or ==0, select tends to block
-            response = ""
+            stdout = ""
+            stderr = ""
             errors = ""
             while ws_client.is_open():
                 ws_client.run_forever(timeout=WEBSOCKET_CALL_TIMEOUT)
-                errors += ws_client.read_channel(ERROR_CHANNEL)
+                if combine_output:
+                    # read_all() clears all channels, including ERROR_CHANNEL.
+                    errors += ws_client.read_channel(ERROR_CHANNEL)
+                    # Keep the historical mixed-stream ordering for exec().
+                    stdout += ws_client.read_all()
+                else:
+                    # Read both output channels before handling the metadata channel.
+                    stdout += ws_client.read_channel(STDOUT_CHANNEL)
+                    stderr += ws_client.read_channel(STDERR_CHANNEL)
+                    errors += ws_client.read_channel(ERROR_CHANNEL)
                 logger.debug("%s", errors)
-                # read_all would consume ERR_CHANNEL, so read_all needs to be last
-                response += ws_client.read_all()
+            if combine_output:
+                stdout += ws_client.read_all()
+            else:
+                # run_forever() may return after the socket closes while output
+                # is still buffered in the client.
+                stdout += ws_client.read_channel(STDOUT_CHANNEL)
+                stderr += ws_client.read_channel(STDERR_CHANNEL)
             if errors:
                 # errors = '{"metadata":{},"status":"Success"}'
                 j = json.loads(errors)
@@ -680,6 +708,7 @@ class Sandcastle(object):
                 elif status == "Failure":
                     logger.info("exec command failed")
                     logger.debug(j)
+                    output = stdout + stderr
                     # the timeout could have been reached here which means
                     # the pod is not running, so we are not able `oc rsync` things from inside:
                     # we won't be needing the data any more since p-s halts execution
@@ -704,7 +733,7 @@ class Sandcastle(object):
                                 rc = int(c.get("message", None))
                             except ValueError:
                                 rc = 999
-                    raise SandcastleCommandFailed(output=response, reason=errors, rc=rc)
+                    raise SandcastleCommandFailed(output=output, reason=errors, rc=rc)
                 else:
                     logger.warning(
                         "exec didn't yield the metadata we expect, mighty suspicious, %s",
@@ -713,8 +742,29 @@ class Sandcastle(object):
         finally:
             ws_client.close()
 
-        logger.debug("exec response = %r" % response)
-        return response
+        logger.debug("exec stdout = %r, stderr = %r", stdout, stderr)
+        return SandcastleCommandOutput(stdout=stdout, stderr=stderr)
+
+    def exec_with_output(
+        self,
+        command: List[str],
+        env: Optional[Dict] = None,
+        cwd: Union[str, Path] = None,
+    ) -> SandcastleCommandOutput:
+        """Execute a command and return stdout and stderr separately."""
+        return self._exec_with_output(command=command, env=env, cwd=cwd)
+
+    def exec(
+        self,
+        command: List[str],
+        env: Optional[Dict] = None,
+        cwd: Union[str, Path] = None,
+    ) -> str:
+        """Execute a command and return its historical combined output."""
+        output = self._exec_with_output(
+            command=command, env=env, cwd=cwd, combine_output=True
+        )
+        return output.stdout + output.stderr
 
     def _copy_path_to_pod(
         self, local_path: Path, pod_dir: Path, no_perms: bool = False
