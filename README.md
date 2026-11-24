@@ -98,6 +98,18 @@ o.run()
 o.exec(command=["ls", "-lha", f"{sandbox_mountpoint}/"])
 ```
 
+`exec()` returns combined stdout and stderr for compatibility. To preserve the
+streams separately, use `exec_with_output()`:
+
+```python
+output = o.exec_with_output(command=["bash", "-c", "printf out; printf err >&2"])
+assert output.stdout == "out"
+assert output.stderr == "err"
+```
+
+Both methods raise `SandcastleCommandFailed` for non-zero commands; the
+exception exposes the parsed return code through its `rc` attribute.
+
 ## Developing sandcastle
 
 In order to develop this project (and run tests), there are several requirements which need to be met.

@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: MIT
 
 
-from sandcastle.api import Sandcastle, VolumeSpec, MappedDir  # NOQA
+from sandcastle.api import (  # NOQA
+    MappedDir,
+    Sandcastle,
+    SandcastleCommandOutput,
+    VolumeSpec,
+)
 from sandcastle.exceptions import (  # NOQA
     SandcastleException,
     SandcastleTimeoutReached,
